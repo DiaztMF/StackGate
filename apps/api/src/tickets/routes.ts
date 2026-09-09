@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { comments, gateCheckItems, researchLinks, states, ticketTransitions, tickets } from "../db/schema.js";
+import { comments, gateCheckItems, projects, researchLinks, states, ticketTransitions, tickets } from "../db/schema.js";
 import { authMiddleware, type AuthUser } from "../auth/middleware.js";
+import { invalidJson, readJson } from "../http.js";
 import { checkTransition } from "./guard.js";
 
 const ticketsApi = new Hono<{ Variables: { user: AuthUser } }>();
@@ -14,10 +15,14 @@ ticketsApi.get("/projects/:id/tickets", authMiddleware, async (c) => {
 
 ticketsApi.post("/projects/:id/tickets", authMiddleware, async (c) => {
   const user = c.get("user");
-  const body = await c.req.json<{ title: string; description?: string; assigneeId?: string; researchRequired?: boolean }>();
+  const parsed = await readJson<{ title: string; description?: string; assigneeId?: string; researchRequired?: boolean }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const body = parsed.body;
   if (!body.title || body.title.trim().length === 0) {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "Judul tiket wajib diisi" } }, 400);
   }
+  const [project] = await db.select().from(projects).where(eq(projects.id, c.req.param("id"))).limit(1);
+  if (!project) return c.json({ error: { code: "NOT_FOUND", message: "Proyek tidak ditemukan" } }, 404);
   const projectStates = await db.select().from(states).where(eq(states.projectId, c.req.param("id")));
   const backlog = projectStates.find((s) => s.key === "backlog");
   if (!backlog) return c.json({ error: { code: "VALIDATION_ERROR", message: "State backlog belum ada" } }, 400);
@@ -45,12 +50,21 @@ ticketsApi.get("/tickets/:id", authMiddleware, async (c) => {
 
 ticketsApi.post("/tickets/:id/transition", authMiddleware, async (c) => {
   const user = c.get("user");
-  const { to_state } = await c.req.json<{ to_state: string }>();
-  const result = await checkTransition(c.req.param("id"), to_state, user);
+  const parsed = await readJson<{ to_state: string; note?: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const { to_state, note } = parsed.body;
+  if (!to_state || to_state.trim().length === 0) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "State tujuan wajib diisi" } }, 400);
+  }
+  const result = await checkTransition(c.req.param("id"), to_state, user, note);
   if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, result.status);
   const [ticket] = await db.select().from(tickets).where(eq(tickets.id, c.req.param("id"))).limit(1);
-  const [updated] = await db.update(tickets).set({ stateId: result.toStateId }).where(eq(tickets.id, c.req.param("id"))).returning();
-  await db.insert(ticketTransitions).values({ ticketId: updated.id, fromStateId: ticket.stateId, toStateId: result.toStateId, actorId: user.id });
+  if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  const [updated] = await db.transaction(async (tx) => {
+    const [row] = await tx.update(tickets).set({ stateId: result.toStateId }).where(eq(tickets.id, c.req.param("id"))).returning();
+    await tx.insert(ticketTransitions).values({ ticketId: row.id, fromStateId: ticket.stateId, toStateId: result.toStateId, actorId: user.id });
+    return [row];
+  });
   return c.json({ data: { ticket: updated } });
 });
 
@@ -61,7 +75,9 @@ ticketsApi.get("/tickets/:id/research-links", authMiddleware, async (c) => {
 
 ticketsApi.post("/tickets/:id/research-links", authMiddleware, async (c) => {
   const user = c.get("user");
-  const body = await c.req.json<{ url: string; label: string; required?: boolean }>();
+  const parsed = await readJson<{ url: string; label: string; required?: boolean }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const body = parsed.body;
   if (!body.url || !body.label) {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "URL dan label wajib diisi" } }, 400);
   }
@@ -82,7 +98,12 @@ ticketsApi.post("/tickets/:id/gate-checks", authMiddleware, async (c) => {
   if (user.role === "student") {
     return c.json({ error: { code: "FORBIDDEN_TRANSITION", message: "Hanya lead yang mengelola checklist" } }, 403);
   }
-  const body = await c.req.json<{ label: string }>();
+  const parsed = await readJson<{ label: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const body = parsed.body;
+  if (!body.label || body.label.trim().length === 0) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Label wajib diisi" } }, 400);
+  }
   const [row] = await db.insert(gateCheckItems).values({ ticketId: c.req.param("id"), label: body.label }).returning();
   return c.json({ data: { item: row } }, 201);
 });
@@ -94,7 +115,9 @@ ticketsApi.get("/tickets/:id/comments", authMiddleware, async (c) => {
 
 ticketsApi.post("/tickets/:id/comments", authMiddleware, async (c) => {
   const user = c.get("user");
-  const body = await c.req.json<{ body: string }>();
+  const parsed = await readJson<{ body: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const body = parsed.body;
   if (!body.body || body.body.trim().length === 0) {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "Komentar tidak boleh kosong" } }, 400);
   }

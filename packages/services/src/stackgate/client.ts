@@ -19,6 +19,40 @@ export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 
+let refreshPromise: Promise<string> | null = null;
+
+function isAuthUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  return url.includes("/api/auth/login") || url.includes("/api/auth/refresh");
+}
+
+async function fetchFreshToken(): Promise<string> {
+  const refresh = await axios.post<{ data: { accessToken: string } }>(
+    `${process.env.VITE_API_BASE_URL}/api/auth/refresh`,
+    {},
+    { withCredentials: true },
+  );
+  return refresh.data.data.accessToken;
+}
+
+async function clearWhenDone(p: Promise<string>): Promise<void> {
+  try {
+    await p;
+  } catch {
+    // caller handles refresh errors
+  } finally {
+    if (refreshPromise === p) refreshPromise = null;
+  }
+}
+
+function startRefresh(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = fetchFreshToken();
+    void clearWhenDone(refreshPromise);
+  }
+  return refreshPromise;
+}
+
 interface RetriableConfig extends InternalAxiosRequestConfig {
   _retried?: boolean;
 }
@@ -32,20 +66,22 @@ export function createStackGateClient(): AxiosInstance {
   instance.interceptors.response.use(
     (res) => res,
     async (error: unknown) => {
-      const axiosError = error as AxiosError<{ error?: { code?: string } }>;
+      const axiosError = error as AxiosError<{ error?: { code?: string; message?: string } }>;
       const original = axiosError.config as RetriableConfig | undefined;
-      if (axiosError.response?.status === 401 && original && !original._retried) {
+      if (axiosError.response?.status === 401 && original && !original._retried && !isAuthUrl(original.url)) {
         original._retried = true;
-        const refresh = await axios.post<{ data: { accessToken: string } }>(
-          `${process.env.VITE_API_BASE_URL}/api/auth/refresh`,
-          {},
-          { withCredentials: true },
-        );
-        setAccessToken(refresh.data.data.accessToken);
-        return instance(original);
+        try {
+          const token = await startRefresh();
+          setAccessToken(token);
+          return instance(original);
+        } catch {
+          setAccessToken(null);
+          throw new Error(toUserMessage("UNAUTHORIZED"));
+        }
       }
-      const code = axiosError.response?.data?.error?.code;
-      throw new Error(code ? toUserMessage(code) : "Terjadi kesalahan, coba lagi");
+      const serverMessage = axiosError.response?.data?.error?.message as string | undefined;
+      const code = axiosError.response?.data?.error?.code as string | undefined;
+      throw new Error(serverMessage ?? (code ? toUserMessage(code) : "Terjadi kesalahan, coba lagi"));
     },
   );
   return instance;
