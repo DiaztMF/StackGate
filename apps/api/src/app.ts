@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import auth from "./auth/routes.js";
+import ticketsApi from "./tickets/routes.js";
 
 export function createApp(): Hono {
   const app = new Hono();
 
   app.get("/api/health", (c) => c.json({ data: { ok: true } }));
   app.route("/api/auth", auth);
+  app.route("/api", ticketsApi);
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: "Not found" } }, 404));
   app.onError((err, c) => {
