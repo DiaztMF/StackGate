@@ -19,3 +19,6 @@ export * from "./file";
 export * from "./label";
 export * from "./state";
 export * from "./issue";
+export * from "./stackgate/client";
+export * from "./stackgate/auth";
+export * from "./stackgate/tickets";
