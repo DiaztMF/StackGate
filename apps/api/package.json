@@ -8,7 +8,10 @@
     "build": "tsc --noEmit",
     "check:types": "tsc --noEmit",
     "check:lint": "oxlint --max-warnings=0 src tests",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
     "@vercel/functions": "^2.2.2",
