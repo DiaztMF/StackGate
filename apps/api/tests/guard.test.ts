@@ -134,12 +134,18 @@ function transition(token: string, ticketId: string, body: Record<string, string
   });
 }
 
+// NOTE: 30s timeout — each test builds a full fixture (2x bcrypt.hash +
+// 2x bcrypt.compare + ~10 Neon roundtrips). Locally ~3s/test; on the
+// 2-CPU CI runner with a cold Neon compute this exceeds vitest's 5s
+// default, and timed-out tests leave ghost requests racing cleanup
+// (FK violations + TypeErrors in later cleanups). Proven by CI run
+// 34334261808: 2 timeouts cascading into delete/update races.
 describe("guard matrix", () => {
   it("student backlog→in-development → 200", async () => {
     const f = await setupFixture({ description: "Deskripsi awal" });
     const res = await transition(f.studentToken, f.ticketId, { to_state: "in-development" });
     expect(res.status).toBe(200);
-  });
+  }, 30000);
 
   it("student →ready → 403 FORBIDDEN_TRANSITION", async () => {
     const f = await setupFixture();
@@ -147,7 +153,7 @@ describe("guard matrix", () => {
     expect(res.status).toBe(403);
     const json = (await res.json()) as { error: { code: string } };
     expect(json.error.code).toBe("FORBIDDEN_TRANSITION");
-  });
+  }, 30000);
 
   it("lead →ready with unchecked gate items → 422 GATE_INCOMPLETE", async () => {
     const f = await setupFixture();
@@ -156,7 +162,7 @@ describe("guard matrix", () => {
     expect(res.status).toBe(422);
     const json = (await res.json()) as { error: { code: string } };
     expect(json.error.code).toBe("GATE_INCOMPLETE");
-  });
+  }, 30000);
 
   it("researchRequired ticket student in-development→review → 422 RESEARCH_LINK_REQUIRED", async () => {
     const f = await setupFixture({ description: "Riset modul X", researchRequired: true });
@@ -166,7 +172,7 @@ describe("guard matrix", () => {
     expect(r2.status).toBe(422);
     const json = (await r2.json()) as { error: { code: string } };
     expect(json.error.code).toBe("RESEARCH_LINK_REQUIRED");
-  });
+  }, 30000);
 
   it("lead reject review→in-development without note → 422, with note → 200", async () => {
     const f = await setupFixture({ description: "Deskripsi lengkap" });
@@ -178,5 +184,5 @@ describe("guard matrix", () => {
     expect(bad.status).toBe(422);
     const good = await transition(f.leadToken, f.ticketId, { to_state: "in-development", note: "Perlu revisi" });
     expect(good.status).toBe(200);
-  });
+  }, 30000);
 });
