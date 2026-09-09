@@ -1,4 +1,4 @@
-import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
+import axios, { create, type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 
 const ERROR_MESSAGES: Record<string, string> = {
   UNAUTHORIZED: "Sesi berakhir, silakan login kembali",
@@ -24,7 +24,7 @@ interface RetriableConfig extends InternalAxiosRequestConfig {
 }
 
 export function createStackGateClient(): AxiosInstance {
-  const instance = axios.create({ baseURL: process.env.VITE_API_BASE_URL });
+  const instance = create({ baseURL: process.env.VITE_API_BASE_URL });
   instance.interceptors.request.use((config) => {
     if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
     return config;
