@@ -24,7 +24,7 @@ interface RetriableConfig extends InternalAxiosRequestConfig {
 }
 
 export function createStackGateClient(): AxiosInstance {
-  const instance = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL as string });
+  const instance = axios.create({ baseURL: process.env.VITE_API_BASE_URL });
   instance.interceptors.request.use((config) => {
     if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
     return config;
@@ -37,7 +37,7 @@ export function createStackGateClient(): AxiosInstance {
       if (axiosError.response?.status === 401 && original && !original._retried) {
         original._retried = true;
         const refresh = await axios.post<{ data: { accessToken: string } }>(
-          `${import.meta.env.VITE_API_BASE_URL as string}/api/auth/refresh`,
+          `${process.env.VITE_API_BASE_URL}/api/auth/refresh`,
           {},
           { withCredentials: true },
         );
