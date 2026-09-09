@@ -8,6 +8,13 @@
 
 **Tech Stack:** Node >=22.22.0, pnpm 11.10.0, Hono 4, Drizzle ORM + drizzle-kit, `pg` Pool, `@vercel/functions` (`attachDatabasePool`), `bcryptjs`, `hono/jwt`, Vitest, Vercel (static + functions), Neon Postgres.
 
+## Deployed (Plan 01)
+
+- API: `https://stackgate-api.vercel.app` (`/api/health` → `{"data":{"ok":true}}`, `/api/auth/login` real JWT against Neon, transition-without-token → 401). Fixes on the way: catch-all file gets only one-segment routes (reverted to `api/index.ts` + `vercel.json` rewrite); handler is a manual Node `(req, res)` adapter because `hono/vercel`'s `handle()` returns a fetch-style `Response` that Vercel Node ignores; duplicate function commit caught by status check.
+- Web: `https://stackgate-web.vercel.app` (Plane UI, bundle baked with `VITE_API_BASE_URL=https://stackgate-api.vercel.app`, zero `localhost:8000` references). SSO protection disabled. Deployed via `vercel deploy apps/web/build/client` (CLI cwd deploy fails: upstream `clean` script wipes node_modules on install).
+- CI: `ci` workflow green on `plan-01-foundation` (jobs `web` + `api`). Fixes: dropped `pnpm/action-setup` version pin (conflicts with `packageManager`), added `turbo run build --filter=./packages/*` before web checks (dist-based type resolution).
+- Security follow-up (required before sharing): Neon role password was reset after a transcript exposure during Plan 01; rotate again if the URL ever passes through logs, and keep production `JWT_SECRET` distinct from local.
+
 ## Global Constraints
 
 - Node `>=22.22.0`, pnpm `11.10.0`.
