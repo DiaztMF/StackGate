@@ -18,7 +18,7 @@ function refreshCookieOptions(): { httpOnly: true; path: "/api/auth"; maxAge: nu
     path: "/api/auth",
     maxAge: REFRESH_DAYS * 86400,
     sameSite: crossSite ? "None" : "Lax",
-    secure: crossSite ? true : false,
+    secure: crossSite,
   };
 }
 
