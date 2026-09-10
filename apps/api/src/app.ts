@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import auth from "./auth/routes.js";
 import instanceApi from "./instance/routes.js";
+import { planeAuth, planeUsers } from "./plane/routes.js";
 import ticketsApi from "./tickets/routes.js";
 
 export function createApp(): Hono {
@@ -25,6 +26,8 @@ export function createApp(): Hono {
   );
   app.get("/api/health", (c) => c.json({ data: { ok: true } }));
   app.route("/api/auth", auth);
+  app.route("/auth", planeAuth);
+  app.route("/api/users", planeUsers);
   app.route("/api/instances", instanceApi);
   app.route("/api", ticketsApi);
 
