@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import auth from "./auth/routes.js";
 import instanceApi from "./instance/routes.js";
 import { planeAuth, planeUsers } from "./plane/routes.js";
+import { planeUserWorkspaces, planeWorkspaces } from "./plane/workspaces.js";
 import ticketsApi from "./tickets/routes.js";
 
 export function createApp(): Hono {
@@ -28,6 +29,8 @@ export function createApp(): Hono {
   app.route("/api/auth", auth);
   app.route("/auth", planeAuth);
   app.route("/api/users", planeUsers);
+  app.route("/api/users/me/workspaces", planeUserWorkspaces);
+  app.route("/api/workspaces", planeWorkspaces);
   app.route("/api/instances", instanceApi);
   app.route("/api", ticketsApi);
 

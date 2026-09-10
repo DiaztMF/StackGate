@@ -9,8 +9,8 @@ import { hashRefreshToken, newRefreshToken, verifyAccess } from "../auth/tokens.
 import { invalidJson, readJson } from "../http.js";
 
 const REFRESH_DAYS = 7;
-const DEMO_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
-const DEMO_WORKSPACE_SLUG = "stackgate";
+export const DEMO_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
+export const DEMO_WORKSPACE_SLUG = "stackgate";
 
 type UserRow = typeof users.$inferSelect;
 
@@ -31,7 +31,7 @@ function refreshCookieOptions(): {
   };
 }
 
-function toPlaneUser(u: UserRow) {
+export function toPlaneUser(u: UserRow) {
   const username = u.email.includes("@") ? u.email.split("@")[0] : u.email;
   return {
     id: u.id,
@@ -76,7 +76,7 @@ function demoWorkspace(owner: ReturnType<typeof toPlaneUser>) {
   };
 }
 
-async function resolvePlaneUser(c: Context): Promise<UserRow | null> {
+export async function resolvePlaneUser(c: Context): Promise<UserRow | null> {
   const header = c.req.header("Authorization") ?? "";
   const [scheme, token] = header.split(" ");
   if (scheme === "Bearer" && token) {
@@ -106,7 +106,7 @@ async function resolvePlaneUser(c: Context): Promise<UserRow | null> {
   return row ?? null;
 }
 
-function unauthorized(c: Context) {
+export function unauthorized(c: Context) {
   return c.json({ error: { code: "UNAUTHORIZED", message: "Sesi berakhir, silakan login kembali" } }, 401);
 }
 
