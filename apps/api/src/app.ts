@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import auth from "./auth/routes.js";
+import instanceApi from "./instance/routes.js";
 import ticketsApi from "./tickets/routes.js";
 
 export function createApp(): Hono {
-  const app = new Hono();
+  // strict:false — Plane FE calls every endpoint with a trailing slash
+  // (Django APPEND_SLASH behavior); ours are declared without.
+  const app = new Hono({ strict: false });
 
   const origins = (process.env.WEB_ORIGIN ?? "http://localhost:3000")
     .split(",")
@@ -22,6 +25,7 @@ export function createApp(): Hono {
   );
   app.get("/api/health", (c) => c.json({ data: { ok: true } }));
   app.route("/api/auth", auth);
+  app.route("/api/instances", instanceApi);
   app.route("/api", ticketsApi);
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: "Not found" } }, 404));
