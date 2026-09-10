@@ -97,6 +97,9 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 # Deployment
 
+- Default deploy branch is `master`. Never set another branch as production branch.
+- Vercel production branch for `stackgate-web` and `stackgate-api` must be `master`.
+
 - Web frontend deploys as static output (`build/client`) to Vercel. Backend API deploys as Vercel Functions with the Node.js runtime. Realtime (`apps/live`) deploys as a persistent Node process on Render (512MB).
 - Required frontend variables: `VITE_API_BASE_URL`, `VITE_WEB_BASE_URL`, `VITE_LIVE_BASE_URL`, `VITE_LIVE_BASE_PATH` (always `/live`).
 - Required live variables: `REDIS_URL` (Upstash, never localhost in production) and `LIVE_SERVER_SECRET_KEY`.
