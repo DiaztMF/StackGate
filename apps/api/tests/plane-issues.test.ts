@@ -156,4 +156,73 @@ describe("plane-compat issues", () => {
     expect(leadJson.checked).toBe(true);
     expect(leadJson.checked_by.email).toBe("lead@local.dev");
   }, 30000);
+
+  it("enforces research link requirement when moving to review state", async () => {
+    const app = createApp();
+    const studentLogin = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+    });
+    const studentCk = studentLogin.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const wsRes = await app.request("/api/workspaces/stackgate/projects/", { headers: { Cookie: studentCk } });
+    const prjList = (await wsRes.json()) as Array<{ id: string }>;
+    const projectId = prjList[0].id;
+
+    const statesRes = await app.request("/api/workspaces/stackgate/states/", { headers: { Cookie: studentCk } });
+    const statesList = (await statesRes.json()) as Array<{ id: string; name: string }>;
+    const inDevState = statesList.find((s) => s.name === "In Development")!;
+    const reviewState = statesList.find((s) => s.name === "Quality Gate Review")!;
+
+    // 1. Create ticket
+    const createRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: studentCk },
+      body: JSON.stringify({ name: "Research Guard Test", description_html: "<p>Deskripsi tugas</p>" }),
+    });
+    const ticket = (await createRes.json()) as { id: string };
+
+    // Move to in-development and set research_required: true
+    await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: studentCk },
+      body: JSON.stringify({ state_id: inDevState.id, research_required: true }),
+    });
+
+    // 2. Try move to review without research link -> should 422 RESEARCH_LINK_REQUIRED
+    const failReviewRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: studentCk },
+      body: JSON.stringify({ state_id: reviewState.id }),
+    });
+    expect(failReviewRes.status).toBe(422);
+    const failJson = (await failReviewRes.json()) as { error: { code: string } };
+    expect(failJson.error.code).toBe("RESEARCH_LINK_REQUIRED");
+
+    // 3. Add research link
+    const addLinkRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/research-links/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: studentCk },
+      body: JSON.stringify({ label: "Modul Auth Spesifikasi", url: "https://docs.stackgate.dev/auth" }),
+    });
+    expect(addLinkRes.status).toBe(201);
+
+    // 4. GET research links
+    const getLinksRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/research-links/`, {
+      headers: { Cookie: studentCk },
+    });
+    expect(getLinksRes.status).toBe(200);
+    const getLinksJson = (await getLinksRes.json()) as { research_required: boolean; links: Array<{ label: string }> };
+    expect(getLinksJson.research_required).toBe(true);
+    expect(getLinksJson.links.length).toBe(1);
+
+    // 5. Try move to review again -> should succeed with 200
+    const successReviewRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: studentCk },
+      body: JSON.stringify({ state_id: reviewState.id }),
+    });
+    expect(successReviewRes.status).toBe(200);
+  }, 30000);
 });

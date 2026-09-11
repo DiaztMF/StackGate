@@ -1,7 +1,15 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { gateCheckItems, projects, states, ticketTransitions, tickets, users } from "../db/schema.js";
+import {
+  gateCheckItems,
+  projects,
+  researchLinks,
+  states,
+  ticketTransitions,
+  tickets,
+  users,
+} from "../db/schema.js";
 import { invalidJson, readJson } from "../http.js";
 import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, unauthorized } from "./routes.js";
 import { checkTransition } from "../tickets/guard.js";
@@ -141,7 +149,7 @@ planeIssues.post("/:slug/projects/:projectId/issues", async (c) => {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "State backlog tidak ditemukan" } }, 400);
   }
 
-  const assigneeId = parsed.body.assignee_ids?.[0] ?? null;
+  const assigneeId = parsed.body.assignee_ids?.[0] ?? user.id;
   const description = parsed.body.description_html?.replace(/<[^>]*>/g, "").trim() ?? "";
 
   const [row] = await db
@@ -191,6 +199,7 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
     name?: string;
     description_html?: string;
     assignee_ids?: string[];
+    research_required?: boolean;
   }>(c);
   if (!parsed.ok) return invalidJson(c);
 
@@ -202,11 +211,19 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
   if (parsed.body.assignee_ids !== undefined) {
     updates.assigneeId = parsed.body.assignee_ids[0] ?? null;
   }
+  if (typeof parsed.body.research_required === "boolean") {
+    updates.researchRequired = parsed.body.research_required;
+  }
 
   if (parsed.body.state_id && parsed.body.state_id !== ticket.stateId) {
     const [targetState] = await db.select().from(states).where(eq(states.id, parsed.body.state_id)).limit(1);
     if (!targetState) {
       return c.json({ error: { code: "NOT_FOUND", message: "State tidak ditemukan" } }, 404);
+    }
+    // If ticket was just updated in the same request (e.g. researchRequired or assigneeId),
+    // persist updates first before checking transitions, or update ticket record.
+    if (Object.keys(updates).length > 0) {
+      await db.update(tickets).set(updates).where(eq(tickets.id, issueId));
     }
     const guardResult = await checkTransition(ticket.id, targetState.key, {
       id: user.id,
@@ -413,4 +430,120 @@ planeIssues.get("/:slug/projects/:projectId/work-items/:issueId/description-vers
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
   return c.json([]);
+});
+
+planeIssues.get("/:slug/projects/:projectId/issues/:issueId/research-links", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+
+  const issueId = c.req.param("issueId");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
+  if (!ticket) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  }
+
+  const rows = await db
+    .select({
+      id: researchLinks.id,
+      ticketId: researchLinks.ticketId,
+      label: researchLinks.label,
+      url: researchLinks.url,
+      required: researchLinks.required,
+      userId: users.id,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(researchLinks)
+    .leftJoin(users, eq(researchLinks.createdById, users.id))
+    .where(eq(researchLinks.ticketId, issueId));
+
+  return c.json({
+    research_required: ticket.researchRequired,
+    links: rows.map((r) => ({
+      id: r.id,
+      ticket_id: r.ticketId,
+      label: r.label,
+      url: r.url,
+      required: r.required,
+      created_by: r.userId
+        ? {
+            id: r.userId,
+            name: r.userName,
+            email: r.userEmail,
+          }
+        : null,
+    })),
+  });
+});
+
+planeIssues.post("/:slug/projects/:projectId/issues/:issueId/research-links", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+
+  const issueId = c.req.param("issueId");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
+  if (!ticket) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  }
+
+  const parsed = await readJson<{ url?: string; label?: string; required?: boolean }>(c);
+  if (!parsed.ok) return invalidJson(c);
+
+  const url = parsed.body.url?.trim();
+  const label = parsed.body.label?.trim();
+  if (!url || !label) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "URL dan label tautan riset wajib diisi" } }, 400);
+  }
+
+  const [created] = await db
+    .insert(researchLinks)
+    .values({
+      ticketId: issueId,
+      url,
+      label,
+      required: !!parsed.body.required,
+      createdById: user.id,
+    })
+    .returning();
+
+  return c.json(
+    {
+      id: created.id,
+      ticket_id: created.ticketId,
+      label: created.label,
+      url: created.url,
+      required: created.required,
+      created_by: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      },
+    },
+    201
+  );
+});
+
+planeIssues.delete("/:slug/projects/:projectId/issues/:issueId/research-links/:linkId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+
+  const issueId = c.req.param("issueId");
+  const linkId = c.req.param("linkId");
+
+  const [link] = await db.select().from(researchLinks).where(eq(researchLinks.id, linkId)).limit(1);
+  if (!link || link.ticketId !== issueId) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tautan riset tidak ditemukan" } }, 404);
+  }
+
+  await db.delete(researchLinks).where(eq(researchLinks.id, linkId));
+  return c.json({ ok: true });
 });
