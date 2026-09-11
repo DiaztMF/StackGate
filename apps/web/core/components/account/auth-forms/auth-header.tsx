@@ -27,30 +27,30 @@ type TAuthHeader = {
 const Titles = {
   [EAuthModes.SIGN_IN]: {
     [EAuthSteps.EMAIL]: {
-      header: "Work in all dimensions.",
-      subHeader: "Welcome back to Plane.",
+      header: "Project Quality & Gate Control.",
+      subHeader: "Welcome to StackGate.",
     },
     [EAuthSteps.PASSWORD]: {
-      header: "Work in all dimensions.",
-      subHeader: "Welcome back to Plane.",
+      header: "Project Quality & Gate Control.",
+      subHeader: "Welcome to StackGate.",
     },
     [EAuthSteps.UNIQUE_CODE]: {
-      header: "Work in all dimensions.",
-      subHeader: "Welcome back to Plane.",
+      header: "Project Quality & Gate Control.",
+      subHeader: "Welcome to StackGate.",
     },
   },
   [EAuthModes.SIGN_UP]: {
     [EAuthSteps.EMAIL]: {
-      header: "Work in all dimensions.",
-      subHeader: "Create your Plane account.",
+      header: "Project Quality & Gate Control.",
+      subHeader: "Create your StackGate account.",
     },
     [EAuthSteps.PASSWORD]: {
-      header: "Work in all dimensions.",
-      subHeader: "Create your Plane account.",
+      header: "Project Quality & Gate Control.",
+      subHeader: "Create your StackGate account.",
     },
     [EAuthSteps.UNIQUE_CODE]: {
-      header: "Work in all dimensions.",
-      subHeader: "Create your Plane account.",
+      header: "Project Quality & Gate Control.",
+      subHeader: "Create your StackGate account.",
     },
   },
 };
@@ -89,7 +89,7 @@ export const AuthHeader = observer(function AuthHeader(props: TAuthHeader) {
         ),
         subHeader:
           mode == EAuthModes.SIGN_UP
-            ? "Create an account to start managing work with your team."
+            ? "Create an account to start managing projects with quality gates."
             : "Log in to start managing work with your team.",
       };
     }
