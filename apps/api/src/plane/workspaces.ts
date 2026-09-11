@@ -230,6 +230,33 @@ planeWorkspaces.get("/:slug/user-properties", async (c) => {
   return c.json({ rich_filters: [], display_filters: {}, display_properties: {} });
 });
 
+planeWorkspaces.get("/:slug/users/notifications/unread", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  return c.json({
+    total_unread_notifications_count: 0,
+    mention_unread_notifications_count: 0,
+  });
+});
+
+planeWorkspaces.get("/:slug/home-preferences", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  return c.json([]);
+});
+
+planeWorkspaces.get("/:slug/user-favorites", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  return c.json([]);
+});
+
 // Per-workspace project roles live under /api/users/me/workspaces/:slug.
 export const planeUserWorkspaces = new Hono();
 

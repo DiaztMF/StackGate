@@ -28,4 +28,19 @@ describe("plane-compat workspaces", () => {
     const res = await createApp().request("/api/workspaces/stackgate/states/");
     expect(res.status).toBe(401);
   });
+
+  it("GET /api/workspaces/stackgate/users/notifications/unread/ returns 401 without token", async () => {
+    const res = await createApp().request("/api/workspaces/stackgate/users/notifications/unread/");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /api/workspaces/stackgate/home-preferences/ returns 401 without token", async () => {
+    const res = await createApp().request("/api/workspaces/stackgate/home-preferences/");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /api/workspaces/stackgate/user-favorites/ returns 401 without token", async () => {
+    const res = await createApp().request("/api/workspaces/stackgate/user-favorites/?all=true");
+    expect(res.status).toBe(401);
+  });
 });
