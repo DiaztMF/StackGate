@@ -382,13 +382,35 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId/gate-checks/:check
     ticket_id: updated.ticketId,
     label: updated.label,
     checked: !!updated.checkedAt,
-    checked_by: checked
-      ? {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-        }
-      : null,
-    checked_at: updated.checkedAt?.toISOString() ?? null,
+    checked_by: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    },
+    checked_at: updated.checkedAt ? updated.checkedAt.toISOString() : null,
   });
+});
+
+planeIssues.get("/:slug/projects/:projectId/issues/:issueId/history", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeIssues.get("/:slug/projects/:projectId/issues/:issueId/issue-relation", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeIssues.get("/:slug/projects/:projectId/issues/:issueId/sub-issues", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeIssues.get("/:slug/projects/:projectId/work-items/:issueId/description-versions", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
 });

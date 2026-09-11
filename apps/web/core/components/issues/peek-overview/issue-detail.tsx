@@ -29,6 +29,7 @@ import type { TIssueOperations } from "../issue-detail";
 import { IssueParentDetail } from "../issue-detail/parent";
 import { IssueReaction } from "../issue-detail/reactions";
 import { IssueTitleInput } from "../title-input";
+import { QualityGateWidget } from "../issue-detail/quality-gate-widget";
 // services init
 const workItemVersionService = new WorkItemVersionService();
 
@@ -165,6 +166,9 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
             workspaceSlug={workspaceSlug}
           />
         )}
+      </div>
+      <div className="mt-4">
+        <QualityGateWidget workspaceSlug={workspaceSlug} projectId={issue.project_id} issueId={issueId} />
       </div>
     </div>
   );
