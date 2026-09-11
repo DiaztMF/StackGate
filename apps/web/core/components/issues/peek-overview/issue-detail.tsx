@@ -30,6 +30,7 @@ import { IssueParentDetail } from "../issue-detail/parent";
 import { IssueReaction } from "../issue-detail/reactions";
 import { IssueTitleInput } from "../title-input";
 import { QualityGateWidget } from "../issue-detail/quality-gate-widget";
+import { ResearchModuleWidget } from "../issue-detail/research-module-widget";
 // services init
 const workItemVersionService = new WorkItemVersionService();
 
@@ -167,8 +168,9 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
           />
         )}
       </div>
-      <div className="mt-4">
+      <div className="mt-4 space-y-4">
         <QualityGateWidget workspaceSlug={workspaceSlug} projectId={issue.project_id} issueId={issueId} />
+        <ResearchModuleWidget workspaceSlug={workspaceSlug} projectId={issue.project_id} issueId={issueId} />
       </div>
     </div>
   );
