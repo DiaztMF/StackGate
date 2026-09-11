@@ -130,10 +130,10 @@ export const QualityGateWidget = observer(function QualityGateWidget({
   };
 
   return (
-    <div className="rounded-lg border border-subtle bg-layer-1 p-4 shadow-sm space-y-3">
+    <div className="shadow-sm space-y-3 rounded-lg border border-subtle bg-layer-1 p-4">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-medium text-13 text-primary">
+          <div className="flex items-center gap-2 text-13 font-medium text-primary">
             <span>Quality Gate Checklist</span>
           </div>
           <span
@@ -147,17 +147,15 @@ export const QualityGateWidget = observer(function QualityGateWidget({
           </span>
         </div>
 
-        <div className="h-1.5 w-full bg-layer-2 rounded-full overflow-hidden">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-layer-2">
           <div
-            className={`h-full transition-all duration-300 ${
-              isComplete ? "bg-emerald-500" : "bg-amber-500"
-            }`}
+            className={`h-full transition-all duration-300 ${isComplete ? "bg-emerald-500" : "bg-amber-500"}`}
             style={{ width: `${percent}%` }}
           />
         </div>
       </div>
 
-      {actionError && <p className="text-11 text-red-500 font-medium">{actionError}</p>}
+      {actionError && <p className="text-red-500 text-11 font-medium">{actionError}</p>}
 
       {isLoading && items.length === 0 ? (
         <div className="text-11 text-tertiary">Memuat kriteria mutu...</div>
@@ -172,7 +170,7 @@ export const QualityGateWidget = observer(function QualityGateWidget({
                   checked={item.checked}
                   disabled={!isLead}
                   onChange={() => handleToggleCheck(item)}
-                  className="mt-0.5 h-4 w-4 rounded border-subtle text-emerald-600 focus:ring-emerald-500 disabled:cursor-not-allowed cursor-pointer"
+                  className="text-emerald-600 focus:ring-emerald-500 mt-0.5 h-4 w-4 cursor-pointer rounded border-subtle disabled:cursor-not-allowed"
                 />
                 <div className="flex-1 space-y-0.5">
                   <div
@@ -196,9 +194,7 @@ export const QualityGateWidget = observer(function QualityGateWidget({
       )}
 
       {isStudent && (
-        <p className="text-11 text-tertiary italic">
-          Hanya Lead developer yang dapat memvalidasi kriteria mutu ini.
-        </p>
+        <p className="text-11 text-tertiary italic">Hanya Lead developer yang dapat memvalidasi kriteria mutu ini.</p>
       )}
 
       {isLead && (
@@ -209,12 +205,12 @@ export const QualityGateWidget = observer(function QualityGateWidget({
             onChange={(e) => setNewLabel(e.target.value)}
             placeholder="Tambah kriteria mutu baru..."
             disabled={isAdding}
-            className="flex-1 rounded border border-subtle bg-layer-2 px-2.5 py-1 text-12 text-primary placeholder:text-tertiary focus:border-primary focus:outline-none disabled:opacity-50"
+            className="focus:border-primary flex-1 rounded border border-subtle bg-layer-2 px-2.5 py-1 text-12 text-primary placeholder:text-tertiary focus:outline-none disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={isAdding || !newLabel.trim()}
-            className="rounded bg-layer-2 border border-subtle px-2.5 py-1 text-12 font-medium text-primary hover:bg-layer-3 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="rounded border border-subtle bg-layer-2 px-2.5 py-1 text-12 font-medium text-primary transition-colors hover:bg-layer-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isAdding ? "Menambahkan..." : "+ Tambah Kriteria"}
           </button>
