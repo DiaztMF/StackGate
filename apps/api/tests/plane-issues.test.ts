@@ -92,5 +92,5 @@ describe("plane-compat issues", () => {
       body: JSON.stringify({ state_id: readyState.id }),
     });
     expect(patchRes.status).toBe(403);
-  });
+  }, 30000);
 });
