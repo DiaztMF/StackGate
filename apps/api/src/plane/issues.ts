@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projects, tickets } from "../db/schema.js";
+import { projects, states, ticketTransitions, tickets } from "../db/schema.js";
+import { invalidJson, readJson } from "../http.js";
 import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, unauthorized } from "./routes.js";
 
 export const planeIssues = new Hono();
@@ -87,4 +88,52 @@ planeIssues.get("/:slug/projects/:projectId/issues", async (c) => {
     total_pages: 1,
     extra_stats: null,
   });
+});
+
+planeIssues.post("/:slug/projects/:projectId/issues", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+
+  const parsed = await readJson<{ name?: string; description_html?: string; assignee_ids?: string[] }>(c);
+  if (!parsed.ok) return invalidJson(c);
+
+  const name = parsed.body.name?.trim();
+  if (!name) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Judul tiket wajib diisi" } }, 400);
+  }
+
+  const projectId = c.req.param("projectId");
+  const projectStates = await db.select().from(states).where(eq(states.projectId, projectId));
+  const backlog = projectStates.find((s) => s.key === "backlog");
+  if (!backlog) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "State backlog tidak ditemukan" } }, 400);
+  }
+
+  const assigneeId = parsed.body.assignee_ids?.[0] ?? null;
+  const description = parsed.body.description_html?.replace(/<[^>]*>/g, "").trim() ?? "";
+
+  const [row] = await db
+    .insert(tickets)
+    .values({
+      projectId,
+      stateId: backlog.id,
+      title: name,
+      description,
+      assigneeId,
+      reporterId: user.id,
+      researchRequired: false,
+    })
+    .returning();
+
+  await db.insert(ticketTransitions).values({
+    ticketId: row.id,
+    fromStateId: null,
+    toStateId: backlog.id,
+    actorId: user.id,
+  });
+
+  return c.json(toBaseIssue(row, 1), 201);
 });
