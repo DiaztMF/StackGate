@@ -26,6 +26,7 @@ export function createApp(): Hono {
     }),
   );
   app.get("/api/health", (c) => c.json({ data: { ok: true } }));
+  app.get("/favicon.ico", () => new Response(null, { status: 204 }));
   app.route("/api/auth", auth);
   app.route("/auth", planeAuth);
   app.route("/api/users", planeUsers);

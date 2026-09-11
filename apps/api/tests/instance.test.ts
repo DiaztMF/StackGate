@@ -11,6 +11,6 @@ describe("GET /api/instances/", () => {
     };
     expect(json.instance.is_setup_done).toBe(true);
     expect(json.config.is_email_password_enabled).toBe(true);
-    expect(json.config.enable_signup).toBe(false);
+    expect(json.config.enable_signup).toBe(true);
   });
 });

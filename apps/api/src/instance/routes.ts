@@ -31,7 +31,7 @@ instanceApi.get("/", (c) =>
       workspaces_exist: true,
     },
     config: {
-      enable_signup: false,
+      enable_signup: true,
       is_workspace_creation_disabled: true,
       is_google_enabled: false,
       is_github_enabled: false,

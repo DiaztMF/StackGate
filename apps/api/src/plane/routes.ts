@@ -4,7 +4,7 @@ import type { Context } from "hono";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { refreshTokens, users } from "../db/schema.js";
-import { verifyPassword } from "../auth/password.js";
+import { hashPassword, verifyPassword } from "../auth/password.js";
 import { hashRefreshToken, newRefreshToken, verifyAccess } from "../auth/tokens.js";
 import { invalidJson, readJson } from "../http.js";
 
@@ -139,36 +139,35 @@ planeAuth.post("/set-password", (c) =>
   c.json({ error: { code: "VALIDATION_ERROR", message: "Reset password belum didukung" } }, 400),
 );
 
-planeAuth.post("/sign-up", (c) =>
-  c.json({ error: { code: "VALIDATION_ERROR", message: "Pendaftaran akun baru dimatikan, hubungi admin" } }, 403),
-);
-
-planeAuth.post("/sign-in", async (c) => {
+async function readCredentials(c: Context) {
   const contentType = c.req.header("content-type") ?? "";
-  let email = "";
-  let password = "";
-  let nextPath = "";
-  let wantsJson = false;
   if (contentType.includes("application/json")) {
-    wantsJson = true;
-    const parsed = await readJson<{ email?: string; password?: string; next_path?: string }>(c);
-    if (!parsed.ok) return invalidJson(c);
-    email = parsed.body.email?.trim() ?? "";
-    password = parsed.body.password ?? "";
-    nextPath = parsed.body.next_path ?? "";
-  } else {
-    const body = await c.req.parseBody();
-    email = String(body["email"] ?? "").trim();
-    password = String(body["password"] ?? "");
-    nextPath = String(body["next_path"] ?? "");
+    const parsed = await readJson<{
+      email?: string;
+      password?: string;
+      confirm_password?: string;
+      next_path?: string;
+    }>(c);
+    if (!parsed.ok) return null;
+    return {
+      email: parsed.body.email?.trim() ?? "",
+      password: parsed.body.password ?? "",
+      confirm: parsed.body.confirm_password ?? "",
+      nextPath: parsed.body.next_path ?? "",
+      wantsJson: true,
+    };
   }
-  if (!email || !password) {
-    return c.json({ error: { code: "VALIDATION_ERROR", message: "Email dan password wajib diisi" } }, 400);
-  }
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return c.json({ error: { code: "UNAUTHORIZED", message: "Email atau password salah" } }, 401);
-  }
+  const body = await c.req.parseBody();
+  return {
+    email: String(body["email"] ?? "").trim(),
+    password: String(body["password"] ?? ""),
+    confirm: String(body["confirm_password"] ?? ""),
+    nextPath: String(body["next_path"] ?? ""),
+    wantsJson: false,
+  };
+}
+
+async function issueSession(c: Context, user: UserRow): Promise<void> {
   const { token, tokenHash } = newRefreshToken();
   await db.insert(refreshTokens).values({
     userId: user.id,
@@ -176,10 +175,55 @@ planeAuth.post("/sign-in", async (c) => {
     expiresAt: new Date(Date.now() + REFRESH_DAYS * 86400 * 1000),
   });
   setCookie(c, "sg_refresh", token, refreshCookieOptions());
-  if (wantsJson) return c.json(toPlaneUser(user));
+}
+
+function redirectHome(c: Context, nextPath: string) {
   const base = (process.env.WEB_ORIGIN ?? "http://localhost:3000").split(",")[0].trim();
   const target = nextPath.startsWith("/") ? `${base}${nextPath}` : base;
   return c.redirect(target, 302);
+}
+
+planeAuth.post("/sign-up", async (c) => {
+  const creds = await readCredentials(c);
+  if (!creds) return invalidJson(c);
+  const { email, password, confirm, nextPath, wantsJson } = creds;
+  if (!email || !password) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Email dan password wajib diisi" } }, 400);
+  }
+  if (password.length < 8) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Password minimal 8 karakter" } }, 400);
+  }
+  if (confirm && confirm !== password) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Konfirmasi password tidak sama" } }, 400);
+  }
+  const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  if (existing) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Email sudah terdaftar, silakan login" } }, 400);
+  }
+  const name = email.includes("@") ? email.split("@")[0] : email;
+  const [user] = await db
+    .insert(users)
+    .values({ email, name, role: "student", passwordHash: await hashPassword(password) })
+    .returning();
+  await issueSession(c, user);
+  if (wantsJson) return c.json(toPlaneUser(user));
+  return redirectHome(c, nextPath);
+});
+
+planeAuth.post("/sign-in", async (c) => {
+  const creds = await readCredentials(c);
+  if (!creds) return invalidJson(c);
+  const { email, password, nextPath, wantsJson } = creds;
+  if (!email || !password) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Email dan password wajib diisi" } }, 400);
+  }
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    return c.json({ error: { code: "UNAUTHORIZED", message: "Email atau password salah" } }, 401);
+  }
+  await issueSession(c, user);
+  if (wantsJson) return c.json(toPlaneUser(user));
+  return redirectHome(c, nextPath);
 });
 
 // Plane web identity endpoints under /api/users/me/*. Plane-shaped (no envelope).
