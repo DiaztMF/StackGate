@@ -13,4 +13,26 @@ describe("plane-compat issues", () => {
     const res = await createApp().request("/api/workspaces/stackgate/projects/test/issues/");
     expect(res.status).toBe(401);
   });
+
+  it("GET /api/workspaces/stackgate/projects/:id/issues/ returns TIssuesResponse for authenticated user", async () => {
+    const app = createApp();
+    const login = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+    });
+    const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const wsRes = await app.request("/api/workspaces/stackgate/projects/", { headers: { Cookie: ck } });
+    const prjList = (await wsRes.json()) as Array<{ id: string }>;
+    const projectId = prjList[0].id;
+
+    const res = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/`, {
+      headers: { Cookie: ck },
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { results: unknown[]; total_count: number };
+    expect(Array.isArray(json.results)).toBe(true);
+    expect(typeof json.total_count).toBe("number");
+  });
 });
