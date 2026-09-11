@@ -32,7 +32,7 @@ import interVariableWoff2 from "@fontsource-variable/inter/files/inter-latin-wgh
 import "@fontsource/material-symbols-rounded";
 import "@fontsource/ibm-plex-mono";
 
-const APP_TITLE = "Plane | Simple, extensible, open-source project management tool.";
+const APP_TITLE = "StackGate | Modern Project Management & Quality Gate Platform";
 
 export const links: LinksFunction = () => [
   { rel: "icon", type: "image/png", sizes: "32x32", href: favicon32 },
@@ -88,9 +88,9 @@ export const meta: Route.MetaFunction = () => [
   { property: "og:title", content: APP_TITLE },
   {
     property: "og:description",
-    content: "Open-source project management tool to manage work items, cycles, and product roadmaps easily",
+    content: SITE_DESCRIPTION,
   },
-  { property: "og:url", content: "https://app.plane.so/" },
+  { property: "og:url", content: "https://stackgate-web.vercel.app/" },
   { property: "og:image", content: ogImage },
   { property: "og:image:width", content: "1200" },
   { property: "og:image:height", content: "630" },
