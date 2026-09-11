@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { projectMembers, projects, states, users, workspaceMembers, workspaces } from "../db/schema.js";
 import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, toPlaneUser, unauthorized } from "./routes.js";
@@ -135,12 +135,145 @@ planeWorkspaces.get("/:slug/projects", async (c) => {
   return c.json(await listPlaneProjects(user, ws, user.id));
 });
 
-planeWorkspaces.get("/:slug/projects/details", async (c) => {
+planeWorkspaces.get("/:slug/projects/:projectId", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
-  return c.json(await listPlaneProjects(user, ws, user.id));
+  const projectId = c.req.param("projectId");
+  const [project] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+  if (!project) return c.json({ error: { code: "NOT_FOUND", message: "Proyek tidak ditemukan" } }, 404);
+  const [membership] = await db
+    .select()
+    .from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, user.id)))
+    .limit(1);
+  return c.json(toPlaneProject(project, ws.id, membership ? roleNumber(membership.role) : roleNumber(user.role), user.id));
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/project-members/me", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const projectId = c.req.param("projectId");
+  const [membership] = await db
+    .select()
+    .from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, user.id)))
+    .limit(1);
+  return c.json({
+    id: membership?.id ?? `${projectId}:${user.id}`,
+    member: user.id,
+    role: membership ? roleNumber(membership.role) : roleNumber(user.role),
+    original_role: membership ? roleNumber(membership.role) : roleNumber(user.role),
+    created_at: new Date().toISOString(),
+  });
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/states", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const projectId = c.req.param("projectId");
+  const stateRows = await db.select().from(states).where(eq(states.projectId, projectId));
+  const out = stateRows.map((s, i) => {
+    const style = STATE_STYLE[s.key] ?? { group: "unstarted", color: "#d9d9d9" };
+    return {
+      id: s.id,
+      color: style.color,
+      default: s.key === "backlog",
+      description: "",
+      group: style.group,
+      name: s.name,
+      project_id: projectId,
+      sequence: i,
+      workspace_id: ws.id,
+      order: i,
+    };
+  });
+  return c.json(out);
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/members", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const allUsers = await db.select().from(users);
+  return c.json(
+    allUsers.map((u) => ({
+      id: u.id,
+      member: {
+        avatar_url: "",
+        display_name: u.name,
+        email: u.email,
+        first_name: u.name,
+        id: u.id,
+        is_bot: false,
+        last_name: "",
+      },
+      role: roleNumber(u.role),
+    })),
+  );
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/issue-labels", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/user-properties", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json({
+    sort_order: 1,
+    preferences: {
+      pages: { block_display: true },
+      navigation: { default_tab: "issues", hide_in_more_menu: [] },
+    },
+    rich_filters: [],
+    display_filters: {},
+    display_properties: {},
+  });
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/views", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/cycles", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/modules", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/estimates", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeWorkspaces.get("/:slug/projects/:projectId/intake-state", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeWorkspaces.get("/:slug/modules", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
 });
 
 const STATE_STYLE: Record<string, { group: string; color: string }> = {
