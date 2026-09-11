@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { projects, states, ticketTransitions, tickets } from "../db/schema.js";
 import { invalidJson, readJson } from "../http.js";
 import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, unauthorized } from "./routes.js";
+import { checkTransition } from "../tickets/guard.js";
 
 export const planeIssues = new Hono();
 
@@ -136,4 +137,60 @@ planeIssues.post("/:slug/projects/:projectId/issues", async (c) => {
   });
 
   return c.json(toBaseIssue(row, 1), 201);
+});
+
+planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+
+  const issueId = c.req.param("issueId");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
+  if (!ticket) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  }
+
+  const parsed = await readJson<{
+    state_id?: string;
+    name?: string;
+    description_html?: string;
+    assignee_ids?: string[];
+  }>(c);
+  if (!parsed.ok) return invalidJson(c);
+
+  const updates: Partial<typeof tickets.$inferInsert> = {};
+  if (parsed.body.name) updates.title = parsed.body.name.trim();
+  if (parsed.body.description_html !== undefined) {
+    updates.description = parsed.body.description_html.replace(/<[^>]*>/g, "").trim();
+  }
+  if (parsed.body.assignee_ids !== undefined) {
+    updates.assigneeId = parsed.body.assignee_ids[0] ?? null;
+  }
+
+  if (parsed.body.state_id && parsed.body.state_id !== ticket.stateId) {
+    const [targetState] = await db.select().from(states).where(eq(states.id, parsed.body.state_id)).limit(1);
+    if (!targetState) {
+      return c.json({ error: { code: "NOT_FOUND", message: "State tidak ditemukan" } }, 404);
+    }
+    const guardResult = await checkTransition(ticket.id, targetState.key, {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
+    if (!guardResult.ok) {
+      return c.json({ error: { code: guardResult.code, message: guardResult.message } }, guardResult.status);
+    }
+    updates.stateId = targetState.id;
+    await db.insert(ticketTransitions).values({
+      ticketId: ticket.id,
+      fromStateId: ticket.stateId,
+      toStateId: targetState.id,
+      actorId: user.id,
+    });
+  }
+
+  const [updated] = await db.update(tickets).set(updates).where(eq(tickets.id, issueId)).returning();
+  return c.json(toBaseIssue(updated, 1));
 });

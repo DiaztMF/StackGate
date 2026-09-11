@@ -58,4 +58,39 @@ describe("plane-compat issues", () => {
     const json = (await res.json()) as { id: string; name: string };
     expect(json.name).toBe("Tiket Baru Test");
   });
+
+  it("PATCH /api/workspaces/stackgate/projects/:id/issues/:issueId/ rejects student moving to ready", async () => {
+    const app = createApp();
+    const login = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+    });
+    const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const wsRes = await app.request("/api/workspaces/stackgate/projects/", { headers: { Cookie: ck } });
+    const prjList = (await wsRes.json()) as Array<{ id: string }>;
+    const projectId = prjList[0].id;
+
+    // Get ready state ID
+    const statesRes = await app.request("/api/workspaces/stackgate/states/", { headers: { Cookie: ck } });
+    const statesList = (await statesRes.json()) as Array<{ id: string; group: string }>;
+    const readyState = statesList.find((s) => s.group === "completed")!;
+
+    // Create ticket
+    const createRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: ck },
+      body: JSON.stringify({ name: "Guard Test" }),
+    });
+    const ticket = (await createRes.json()) as { id: string };
+
+    // Move to ready as student -> should 403
+    const patchRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: ck },
+      body: JSON.stringify({ state_id: readyState.id }),
+    });
+    expect(patchRes.status).toBe(403);
+  });
 });
