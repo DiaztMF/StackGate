@@ -31,6 +31,7 @@ import { IssueTitleInput } from "../title-input";
 import { IssueActivity } from "./issue-activity";
 import { IssueParentDetail } from "./parent";
 import { IssueReaction } from "./reactions";
+import { QualityGateWidget } from "./quality-gate-widget";
 import type { TIssueOperations } from "./root";
 // services init
 const workItemVersionService = new WorkItemVersionService();
@@ -160,6 +161,8 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           )}
         </div>
       </div>
+
+      <QualityGateWidget workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
 
       <IssueDetailWidgets
         workspaceSlug={workspaceSlug}

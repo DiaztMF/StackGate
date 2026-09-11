@@ -51,6 +51,7 @@ export function toPlaneUser(u: UserRow) {
     last_workspace_id: DEMO_WORKSPACE_ID,
     user_timezone: "UTC",
     username,
+    role: u.role,
     last_login_medium: "email",
     theme: { theme: "system" },
   };
