@@ -93,4 +93,67 @@ describe("plane-compat issues", () => {
     });
     expect(patchRes.status).toBe(403);
   }, 30000);
+
+  it("auto-creates 4 gate check items and verifies role permissions", async () => {
+    const app = createApp();
+    const studentLogin = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+    });
+    const studentCk = studentLogin.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const leadLogin = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+    });
+    const leadCk = leadLogin.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const wsRes = await app.request("/api/workspaces/stackgate/projects/", { headers: { Cookie: studentCk } });
+    const prjList = (await wsRes.json()) as Array<{ id: string }>;
+    const projectId = prjList[0].id;
+
+    const createRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: studentCk },
+      body: JSON.stringify({ name: "Quality Gate Auto-Seed Test" }),
+    });
+    const ticket = (await createRes.json()) as { id: string };
+
+    const getRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/gate-checks/`, {
+      headers: { Cookie: studentCk },
+    });
+    expect(getRes.status).toBe(200);
+    const getJson = (await getRes.json()) as { items: Array<{ id: string; label: string; checked: boolean }> };
+    expect(getJson.items.length).toBe(4);
+    expect(getJson.items[0].checked).toBe(false);
+
+    const firstCheckId = getJson.items[0].id;
+
+    // Student tries to check -> 403
+    const studentCheckRes = await app.request(
+      `/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/gate-checks/${firstCheckId}/`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Cookie: studentCk },
+        body: JSON.stringify({ checked: true }),
+      }
+    );
+    expect(studentCheckRes.status).toBe(403);
+
+    // Lead checks -> 200
+    const leadCheckRes = await app.request(
+      `/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/gate-checks/${firstCheckId}/`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Cookie: leadCk },
+        body: JSON.stringify({ checked: true }),
+      }
+    );
+    expect(leadCheckRes.status).toBe(200);
+    const leadJson = (await leadCheckRes.json()) as { checked: boolean; checked_by: { email: string } };
+    expect(leadJson.checked).toBe(true);
+    expect(leadJson.checked_by.email).toBe("lead@local.dev");
+  }, 30000);
 });

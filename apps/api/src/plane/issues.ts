@@ -1,12 +1,19 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projects, states, ticketTransitions, tickets } from "../db/schema.js";
+import { gateCheckItems, projects, states, ticketTransitions, tickets, users } from "../db/schema.js";
 import { invalidJson, readJson } from "../http.js";
 import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, unauthorized } from "./routes.js";
 import { checkTransition } from "../tickets/guard.js";
 
 export const planeIssues = new Hono();
+
+const DEFAULT_GATE_ITEMS = [
+  "Kode berjalan sesuai acceptance tiket",
+  "Tidak ada secret / API key ter-commit",
+  "Mengikuti modul riset yang ditautkan",
+  "Sudah self-test oleh pelaksana",
+];
 
 export function toBaseIssue(t: typeof tickets.$inferSelect, seq: number) {
   return {
@@ -129,6 +136,12 @@ planeIssues.post("/:slug/projects/:projectId/issues", async (c) => {
     })
     .returning();
 
+  await Promise.all(
+    DEFAULT_GATE_ITEMS.map((label) =>
+      db.insert(gateCheckItems).values({ ticketId: row.id, label })
+    )
+  );
+
   await db.insert(ticketTransitions).values({
     ticketId: row.id,
     fromStateId: null,
@@ -193,4 +206,168 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
 
   const [updated] = await db.update(tickets).set(updates).where(eq(tickets.id, issueId)).returning();
   return c.json(toBaseIssue(updated, 1));
+});
+
+planeIssues.get("/:slug/projects/:projectId/issues/:issueId/gate-checks", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+
+  const issueId = c.req.param("issueId");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
+  if (!ticket) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  }
+
+  const rows = await db
+    .select({
+      id: gateCheckItems.id,
+      ticketId: gateCheckItems.ticketId,
+      label: gateCheckItems.label,
+      checkedAt: gateCheckItems.checkedAt,
+      userId: users.id,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(gateCheckItems)
+    .leftJoin(users, eq(gateCheckItems.checkedById, users.id))
+    .where(eq(gateCheckItems.ticketId, issueId));
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.id,
+      ticket_id: r.ticketId,
+      label: r.label,
+      checked: !!r.checkedAt,
+      checked_by: r.userId
+        ? {
+            id: r.userId,
+            name: r.userName,
+            email: r.userEmail,
+          }
+        : null,
+      checked_at: r.checkedAt?.toISOString() ?? null,
+    })),
+  });
+});
+
+planeIssues.post("/:slug/projects/:projectId/issues/:issueId/gate-checks", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+
+  const issueId = c.req.param("issueId");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
+  if (!ticket) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  }
+
+  if (user.role === "student") {
+    return c.json(
+      {
+        error: {
+          code: "FORBIDDEN_TRANSITION",
+          message: "Hanya lead dan PM yang dapat menambah kriteria mutu",
+        },
+      },
+      403
+    );
+  }
+
+  const parsed = await readJson<{ label?: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+
+  const label = parsed.body.label?.trim();
+  if (!label) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Label kriteria mutu wajib diisi" } }, 400);
+  }
+
+  const [created] = await db
+    .insert(gateCheckItems)
+    .values({
+      ticketId: issueId,
+      label,
+    })
+    .returning();
+
+  return c.json(
+    {
+      id: created.id,
+      ticket_id: created.ticketId,
+      label: created.label,
+      checked: false,
+      checked_by: null,
+      checked_at: null,
+    },
+    201
+  );
+});
+
+planeIssues.patch("/:slug/projects/:projectId/issues/:issueId/gate-checks/:checkId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+
+  const issueId = c.req.param("issueId");
+  const checkId = c.req.param("checkId");
+
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
+  if (!ticket) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  }
+
+  const [checkItem] = await db
+    .select()
+    .from(gateCheckItems)
+    .where(eq(gateCheckItems.id, checkId))
+    .limit(1);
+  if (!checkItem || checkItem.ticketId !== issueId) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Kriteria mutu tidak ditemukan" } }, 404);
+  }
+
+  if (user.role !== "lead") {
+    return c.json(
+      {
+        error: {
+          code: "FORBIDDEN_TRANSITION",
+          message: "Hanya lead developer yang dapat memvalidasi checklist mutu",
+        },
+      },
+      403
+    );
+  }
+
+  const parsed = await readJson<{ checked?: boolean }>(c);
+  if (!parsed.ok || typeof parsed.body.checked !== "boolean") return invalidJson(c);
+
+  const checked = parsed.body.checked;
+  const [updated] = await db
+    .update(gateCheckItems)
+    .set({
+      checkedById: checked ? user.id : null,
+      checkedAt: checked ? new Date() : null,
+    })
+    .where(eq(gateCheckItems.id, checkId))
+    .returning();
+
+  return c.json({
+    id: updated.id,
+    ticket_id: updated.ticketId,
+    label: updated.label,
+    checked: !!updated.checkedAt,
+    checked_by: checked
+      ? {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        }
+      : null,
+    checked_at: updated.checkedAt?.toISOString() ?? null,
+  });
 });
