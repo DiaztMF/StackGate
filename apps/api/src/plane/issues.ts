@@ -98,6 +98,27 @@ planeIssues.get("/:slug/projects/:projectId/issues", async (c) => {
   });
 });
 
+planeIssues.get("/:slug/projects/:projectId/issues/:issueId/meta", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json({
+    project_id: c.req.param("projectId"),
+    workspace_id: DEMO_WORKSPACE_SLUG,
+  });
+});
+
+planeIssues.get("/:slug/projects/:projectId/issues/:issueId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+  const issueId = c.req.param("issueId");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
+  if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  return c.json(toBaseIssue(ticket, 1));
+});
+
 planeIssues.post("/:slug/projects/:projectId/issues", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
