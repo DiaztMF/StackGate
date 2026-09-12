@@ -102,4 +102,30 @@ describe("plane-compat workspaces", () => {
     expect(Array.isArray(json.workload)).toBe(true);
     expect(Array.isArray(json.stuck_tickets)).toBe(true);
   });
+
+  it("PATCH /api/workspaces/stackgate/sidebar-preferences/ handles bulk and single updates", async () => {
+    const app = createApp();
+    const login = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+    });
+    const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    // 1. Bulk update
+    const bulkRes = await app.request("/api/workspaces/stackgate/sidebar-preferences/", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: ck },
+      body: JSON.stringify([{ key: "projects", is_pinned: true, sort_order: 1 }]),
+    });
+    expect(bulkRes.status).toBe(200);
+
+    // 2. Single update
+    const singleRes = await app.request("/api/workspaces/stackgate/sidebar-preferences/projects/", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: ck },
+      body: JSON.stringify({ is_pinned: true, sort_order: 1 }),
+    });
+    expect(singleRes.status).toBe(200);
+  });
 });

@@ -423,12 +423,47 @@ planeWorkspaces.get("/:slug/sidebar-preferences", async (c) => {
   return c.json({});
 });
 
+planeWorkspaces.patch("/:slug/sidebar-preferences", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const parsed = await readJson<unknown>(c);
+  return c.json(parsed.ok ? parsed.body : {});
+});
+
+planeWorkspaces.patch("/:slug/sidebar-preferences/:key", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const parsed = await readJson<Record<string, unknown>>(c);
+  return c.json({
+    key: c.req.param("key"),
+    ...(parsed.ok ? parsed.body : {}),
+  });
+});
+
 planeWorkspaces.get("/:slug/user-properties", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   return c.json({ rich_filters: [], display_filters: {}, display_properties: {} });
+});
+
+planeWorkspaces.patch("/:slug/user-properties", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const parsed = await readJson<Record<string, unknown>>(c);
+  return c.json({
+    rich_filters: [],
+    display_filters: {},
+    display_properties: {},
+    ...(parsed.ok ? parsed.body : {}),
+  });
 });
 
 planeWorkspaces.get("/:slug/user-stats/:userId", async (c) => {
