@@ -62,4 +62,21 @@ describe("plane-compat workspaces", () => {
     const json = (await res.json()) as { id: string; name: string };
     expect(json.name).toBe("Proyek Baru Uji Coba");
   });
+
+  it("GET /api/workspaces/stackgate/projects/details/ returns 200 list (not 500 uuid error)", async () => {
+    const app = createApp();
+    const login = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+    });
+    const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const res = await app.request("/api/workspaces/stackgate/projects/details/", {
+      headers: { Cookie: ck },
+    });
+    expect(res.status).toBe(200);
+    const list = (await res.json()) as Array<{ id: string }>;
+    expect(Array.isArray(list)).toBe(true);
+  });
 });

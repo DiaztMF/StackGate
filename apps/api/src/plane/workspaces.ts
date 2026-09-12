@@ -192,6 +192,14 @@ planeWorkspaces.post("/:slug/projects", async (c) => {
   return c.json(toPlaneProject(newProject, ws.id, roleNumber(user.role), user.id), 201);
 });
 
+planeWorkspaces.get("/:slug/projects/details", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  return c.json(await listPlaneProjects(user, ws, user.id));
+});
+
 planeWorkspaces.get("/:slug/projects/:projectId", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
