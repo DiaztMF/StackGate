@@ -225,4 +225,80 @@ describe("plane-compat issues", () => {
     });
     expect(successReviewRes.status).toBe(200);
   }, 30000);
+
+  it("POST /api/workspaces/stackgate/projects/:id/issues/ without auth returns 401", async () => {
+    const res = await createApp().request("/api/workspaces/stackgate/projects/test/issues/not-a-ticket/comments/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment_html: "<p>Halo</p>" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("issue comments CRUD roundtrip with author detail and cleanup", async () => {
+    const app = createApp();
+    const login = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+    });
+    const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+    const jsonHeaders = { "Content-Type": "application/json", Cookie: ck };
+
+    const wsRes = await app.request("/api/workspaces/stackgate/projects/", { headers: { Cookie: ck } });
+    const prjList = (await wsRes.json()) as Array<{ id: string }>;
+    const projectId = prjList[0].id;
+
+    const createRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ name: "Tiket Komentar UAT" }),
+    });
+    expect(createRes.status).toBe(201);
+    const ticket = (await createRes.json()) as { id: string };
+    const base = `/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}`;
+
+    try {
+      const postRes = await app.request(`${base}/comments/`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({ comment_html: "<p>Catatan revisi pertama</p>", comment_stripped: "Catatan revisi pertama" }),
+      });
+      expect(postRes.status).toBe(201);
+      const created = (await postRes.json()) as { id: string; comment_html: string; comment_stripped: string; actor_detail: { display_name: string } };
+      expect(created.comment_stripped).toBe("Catatan revisi pertama");
+      expect(created.actor_detail.display_name).toBe("Siswa");
+
+      const feedRes = await app.request(`${base}/history/?activity_type=issue-comment`, { headers: { Cookie: ck } });
+      expect(feedRes.status).toBe(200);
+      const feed = (await feedRes.json()) as Array<{ id: string }>;
+      expect(feed.some((c) => c.id === created.id)).toBe(true);
+
+      const patchRes = await app.request(`${base}/comments/${created.id}/`, {
+        method: "PATCH",
+        headers: jsonHeaders,
+        body: JSON.stringify({ comment_html: "<p>Catatan revisi kedua</p>" }),
+      });
+      expect(patchRes.status).toBe(200);
+
+      const delRes = await app.request(`${base}/comments/${created.id}/`, {
+        method: "DELETE",
+        headers: jsonHeaders,
+      });
+      expect(delRes.status).toBe(200);
+
+      const afterRes = await app.request(`${base}/history/?activity_type=issue-comment`, { headers: { Cookie: ck } });
+      const after = (await afterRes.json()) as Array<{ id: string }>;
+      expect(after.some((c) => c.id === created.id)).toBe(false);
+    } finally {
+      const { db } = await import("../src/db/client.js");
+      const { comments, gateCheckItems, researchLinks, ticketTransitions, tickets } = await import("../src/db/schema.js");
+      const { eq } = await import("drizzle-orm");
+      await db.delete(comments).where(eq(comments.ticketId, ticket.id));
+      await db.delete(gateCheckItems).where(eq(gateCheckItems.ticketId, ticket.id));
+      await db.delete(researchLinks).where(eq(researchLinks.ticketId, ticket.id));
+      await db.delete(ticketTransitions).where(eq(ticketTransitions.ticketId, ticket.id));
+      await db.delete(tickets).where(eq(tickets.id, ticket.id));
+    }
+  }, 30000);
 });

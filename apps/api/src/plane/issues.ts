@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
+  comments,
   gateCheckItems,
   projects,
   researchLinks,
@@ -411,7 +412,149 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId/gate-checks/:check
 planeIssues.get("/:slug/projects/:projectId/issues/:issueId/history", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
+  const activityType = c.req.query("activity_type") ?? "";
+  if (activityType === "issue-comment" || activityType === "epic-comment") {
+    const issueId = c.req.param("issueId");
+    const rows = await db
+      .select({ comment: comments, author: users })
+      .from(comments)
+      .leftJoin(users, eq(comments.authorId, users.id))
+      .where(eq(comments.ticketId, issueId));
+    return c.json(
+      rows.map((r) =>
+        toPlaneComment(r.comment, r.author ?? user, {
+          slug: c.req.param("slug"),
+          projectId: c.req.param("projectId"),
+          issueId,
+        }),
+      ),
+    );
+  }
   return c.json([]);
+});
+
+function toPlaneComment(
+  row: typeof comments.$inferSelect,
+  author: typeof users.$inferSelect,
+  scope: { slug: string; projectId: string; issueId: string },
+) {
+  const at = row.createdAt.toISOString();
+  return {
+    id: row.id,
+    workspace: scope.slug,
+    workspace_detail: { name: "StackGate", slug: scope.slug, id: scope.slug },
+    project: scope.projectId,
+    project_detail: {
+      id: scope.projectId,
+      identifier: "",
+      name: "",
+      cover_image: "",
+      description: null,
+      emoji: null,
+      icon_prop: null,
+    },
+    issue: scope.issueId,
+    issue_detail: {
+      id: scope.issueId,
+      sequence_id: 0,
+      sort_order: false,
+      name: "",
+      description_html: "",
+      priority: "none",
+      start_date: "",
+      target_date: "",
+      is_draft: false,
+    },
+    actor: author.id,
+    actor_detail: {
+      id: author.id,
+      first_name: author.name,
+      last_name: "",
+      avatar_url: "",
+      is_bot: false,
+      display_name: author.name,
+    },
+    created_at: at,
+    updated_at: at,
+    created_by: row.authorId,
+    updated_by: row.authorId,
+    attachments: [],
+    comment_reactions: [],
+    comment_stripped: row.body,
+    comment_html: `<p>${row.body}</p>`,
+    comment_json: null,
+    external_id: undefined,
+    external_source: undefined,
+    access: "DEFAULT",
+  };
+}
+
+function extractCommentText(body: { comment_stripped?: string; comment_html?: string }): string {
+  if (body.comment_stripped?.trim()) return body.comment_stripped.trim();
+  const stripped = body.comment_html?.replace(/<[^>]*>/g, "").trim() ?? "";
+  return stripped;
+}
+
+planeIssues.post("/:slug/projects/:projectId/issues/:issueId/comments", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+  const projectId = c.req.param("projectId");
+  const issueId = c.req.param("issueId");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
+  if (!ticket || ticket.projectId !== projectId) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  }
+  const parsed = await readJson<{ comment_html?: string; comment_stripped?: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const text = extractCommentText(parsed.body);
+  if (!text) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Komentar tidak boleh kosong" } }, 400);
+  }
+  const [row] = await db.insert(comments).values({ ticketId: issueId, authorId: user.id, body: text }).returning();
+  return c.json(toPlaneComment(row, user, { slug: c.req.param("slug"), projectId, issueId }), 201);
+});
+
+planeIssues.patch("/:slug/projects/:projectId/issues/:issueId/comments/:commentId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const issueId = c.req.param("issueId");
+  const commentId = c.req.param("commentId");
+  const [row] = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
+  if (!row || row.ticketId !== issueId) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Komentar tidak ditemukan" } }, 404);
+  }
+  if (row.authorId !== user.id && user.role !== "lead" && user.role !== "pm") {
+    return c.json({ error: { code: "FORBIDDEN_TRANSITION", message: "Hanya penulis, lead, atau PM yang boleh mengubah komentar" } }, 403);
+  }
+  const parsed = await readJson<{ comment_html?: string; comment_stripped?: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const text = extractCommentText(parsed.body);
+  if (!text) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Komentar tidak boleh kosong" } }, 400);
+  }
+  const [updated] = await db.update(comments).set({ body: text }).where(eq(comments.id, commentId)).returning();
+  return c.json(
+    toPlaneComment(updated, user, { slug: c.req.param("slug"), projectId: c.req.param("projectId"), issueId }),
+  );
+});
+
+planeIssues.delete("/:slug/projects/:projectId/issues/:issueId/comments/:commentId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const issueId = c.req.param("issueId");
+  const commentId = c.req.param("commentId");
+  const [row] = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
+  if (!row || row.ticketId !== issueId) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Komentar tidak ditemukan" } }, 404);
+  }
+  if (row.authorId !== user.id && user.role !== "lead" && user.role !== "pm") {
+    return c.json({ error: { code: "FORBIDDEN_TRANSITION", message: "Hanya penulis, lead, atau PM yang boleh menghapus komentar" } }, 403);
+  }
+  await db.delete(comments).where(eq(comments.id, commentId));
+  return c.json({ ok: true });
 });
 
 planeIssues.get("/:slug/projects/:projectId/issues/:issueId/issue-relation", async (c) => {
