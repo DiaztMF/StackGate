@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import { Links, Meta, Outlet, Scripts } from "react-router";
 import type { LinksFunction } from "react-router";
-import { ThemeProvider, useTheme } from "next-themes";
+import { useTheme } from "next-themes";
 // plane imports
 import { SITE_DESCRIPTION, SITE_NAME } from "@plane/constants";
 // types
@@ -73,9 +73,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <body suppressHydrationWarning>
         <div id="context-menu-portal" />
         <div id="editor-portal" />
-        <ThemeProvider themes={["light", "dark", "light-contrast", "dark-contrast", "custom"]} defaultTheme="system">
-          {children}
-        </ThemeProvider>
+        {children}
         <Scripts />
       </body>
     </html>

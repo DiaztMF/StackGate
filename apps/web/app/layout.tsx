@@ -5,6 +5,7 @@
  */
 
 import { Outlet } from "react-router";
+import { ThemeProvider } from "next-themes";
 // plane imports
 import { cn } from "@plane/utils";
 // local
@@ -15,12 +16,14 @@ import { AppProvider } from "./provider";
 // server build — see the note in app/root.tsx.
 export default function AppShellLayout() {
   return (
-    <AppProvider>
-      <div className={cn("relative flex h-screen w-full flex-col overflow-hidden bg-canvas", "desktop-app-container")}>
-        <main className="relative h-full w-full overflow-hidden">
-          <Outlet />
-        </main>
-      </div>
-    </AppProvider>
+    <ThemeProvider themes={["light", "dark", "light-contrast", "dark-contrast", "custom"]} defaultTheme="system">
+      <AppProvider>
+        <div className={cn("relative flex h-screen w-full flex-col overflow-hidden bg-canvas", "desktop-app-container")}>
+          <main className="relative h-full w-full overflow-hidden">
+            <Outlet />
+          </main>
+        </div>
+      </AppProvider>
+    </ThemeProvider>
   );
 }
