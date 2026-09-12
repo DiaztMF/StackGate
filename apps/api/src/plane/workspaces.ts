@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projectMembers, projects, states, users, workspaceMembers, workspaces } from "../db/schema.js";
+import { projectMembers, projects, states, tickets, users, workspaceMembers, workspaces } from "../db/schema.js";
 import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, toPlaneUser, unauthorized } from "./routes.js";
 
 type UserRow = typeof users.$inferSelect;
@@ -361,6 +361,65 @@ planeWorkspaces.get("/:slug/user-properties", async (c) => {
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   return c.json({ rich_filters: [], display_filters: {}, display_properties: {} });
+});
+
+planeWorkspaces.get("/:slug/user-stats/:userId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const targetId = c.req.param("userId");
+  const assigned = await db.select().from(tickets).where(eq(tickets.assigneeId, targetId));
+  const created = await db.select().from(tickets).where(eq(tickets.reporterId, targetId));
+  return c.json({
+    assigned_issues: assigned.length,
+    completed_issues: 0,
+    created_issues: created.length,
+    pending_issues: assigned.length,
+    priority_distribution: [],
+    state_distribution: [],
+    subscribed_issues: 0,
+  });
+});
+
+planeWorkspaces.get("/:slug/user-profile/:userId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const targetId = c.req.param("userId");
+  const [targetUser] = await db.select().from(users).where(eq(users.id, targetId)).limit(1);
+  if (!targetUser) return c.json({ error: { code: "NOT_FOUND", message: "User tidak ditemukan" } }, 404);
+  return c.json({
+    project_data: [],
+    user_data: {
+      avatar_url: "",
+      cover_image_url: null,
+      display_name: targetUser.name,
+      first_name: targetUser.name,
+      last_name: "",
+      date_joined: targetUser.createdAt,
+      user_timezone: "UTC",
+    },
+  });
+});
+
+planeWorkspaces.get("/:slug/user-activity/:userId", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  return c.json({
+    count: 0,
+    extra_stats: null,
+    next_cursor: "",
+    next_page_results: false,
+    prev_cursor: "",
+    prev_page_results: false,
+    results: [],
+    total_pages: 1,
+    total_results: 0,
+  });
 });
 
 planeWorkspaces.get("/:slug/users/notifications/unread", async (c) => {
