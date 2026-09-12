@@ -9,7 +9,7 @@ import { hashRefreshToken, newRefreshToken, verifyAccess } from "../auth/tokens.
 import { invalidJson, readJson } from "../http.js";
 
 const REFRESH_DAYS = 7;
-export const DEMO_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
+export const DEMO_WORKSPACE_ID = "c8a36d3d-c11c-444b-9612-64f0e384d31f";
 export const DEMO_WORKSPACE_SLUG = "stackgate";
 
 type UserRow = typeof users.$inferSelect;
