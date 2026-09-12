@@ -3,7 +3,7 @@ import { getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { refreshTokens, users } from "../db/schema.js";
+import { projectMembers, projects, refreshTokens, users, workspaceMembers, workspaces } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { hashRefreshToken, newRefreshToken, verifyAccess } from "../auth/tokens.js";
 import { invalidJson, readJson } from "../http.js";
@@ -206,6 +206,24 @@ planeAuth.post("/sign-up", async (c) => {
     .insert(users)
     .values({ email, name, role: "student", passwordHash: await hashPassword(password) })
     .returning();
+
+  const [ws] = await db.select().from(workspaces).limit(1);
+  if (ws) {
+    await db.insert(workspaceMembers).values({
+      workspaceId: ws.id,
+      userId: user.id,
+      role: "student",
+    });
+  }
+  const [prj] = await db.select().from(projects).limit(1);
+  if (prj) {
+    await db.insert(projectMembers).values({
+      projectId: prj.id,
+      userId: user.id,
+      role: "student",
+    });
+  }
+
   await issueSession(c, user);
   if (wantsJson) return c.json(toPlaneUser(user));
   return redirectHome(c, nextPath);

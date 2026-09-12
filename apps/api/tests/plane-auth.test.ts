@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createApp } from "../src/app.js";
 import { db } from "../src/db/client.js";
-import { refreshTokens, users } from "../src/db/schema.js";
+import { projectMembers, refreshTokens, users, workspaceMembers } from "../src/db/schema.js";
 
 process.env.JWT_SECRET = "test-secret-32-chars-minimum-xxxx";
 
@@ -69,6 +69,8 @@ describe("plane-compat auth", () => {
     const [row] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     expect(row.role).toBe("student");
     await db.delete(refreshTokens).where(eq(refreshTokens.userId, row.id));
+    await db.delete(projectMembers).where(eq(projectMembers.userId, row.id));
+    await db.delete(workspaceMembers).where(eq(workspaceMembers.userId, row.id));
     await db.delete(users).where(eq(users.id, row.id));
   });
 
