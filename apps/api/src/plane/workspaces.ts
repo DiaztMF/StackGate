@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projectMembers, projects, states, tickets, users, workspaceMembers, workspaces } from "../db/schema.js";
+import { projectMembers, projects, states, tickets, ticketTransitions, users, workspaceMembers, workspaces } from "../db/schema.js";
 import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, toPlaneUser, unauthorized } from "./routes.js";
 import { invalidJson, readJson } from "../http.js";
 
@@ -48,6 +48,9 @@ function toPlaneWorkspace(ws: WorkspaceRow, owner: ReturnType<typeof toPlaneUser
 function emptyViewProps() {
   return { rich_filters: [], display_filters: undefined, display_properties: {} };
 }
+
+const STUCK_AFTER_DAYS = 3;
+const OVERLOAD_THRESHOLD = 5;
 
 // Workspace-scoped Plane endpoints under /api/workspaces/:slug. Plane-shaped (no envelope).
 export const planeWorkspaces = new Hono();
@@ -512,6 +515,127 @@ planeWorkspaces.get("/:slug/user-favorites", async (c) => {
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   return c.json([]);
+});
+
+planeWorkspaces.get("/:slug/pm-dashboard", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+
+  const projectRows = await db.select().from(projects).where(eq(projects.workspaceId, ws.id));
+  const projectIds = projectRows.map((p) => p.id);
+
+  if (projectIds.length === 0) {
+    return c.json({
+      summary: {
+        total_tickets: 0,
+        active_tickets: 0,
+        stuck_tickets_count: 0,
+        idle_members_count: 0,
+        overload_members_count: 0,
+      },
+      workload: [],
+      stuck_tickets: [],
+    });
+  }
+
+  const [stateRows, ticketRows, userRows, transitionRows] = await Promise.all([
+    db.select().from(states).where(inArray(states.projectId, projectIds)),
+    db.select().from(tickets).where(inArray(tickets.projectId, projectIds)),
+    db.select().from(users),
+    db.select().from(ticketTransitions),
+  ]);
+
+  const projectsMap = new Map(projectRows.map((p) => [p.id, p]));
+  const statesMap = new Map(stateRows.map((s) => [s.id, s]));
+  const usersMap = new Map(userRows.map((u) => [u.id, u]));
+
+  const workload = userRows.map((u) => {
+    const userTickets = ticketRows.filter((t) => t.assigneeId === u.id);
+    let backlog = 0;
+    let in_development = 0;
+    let review = 0;
+    let ready = 0;
+
+    for (const t of userTickets) {
+      const state = statesMap.get(t.stateId);
+      if (!state) continue;
+      if (state.key === "backlog") backlog++;
+      else if (state.key === "in-development") in_development++;
+      else if (state.key === "review") review++;
+      else if (state.key === "ready") ready++;
+    }
+
+    const active_total = in_development + review;
+    const status = active_total === 0 ? "IDLE" : active_total > OVERLOAD_THRESHOLD ? "OVERLOAD" : "NORMAL";
+
+    return {
+      user: {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+      },
+      counts: {
+        backlog,
+        in_development,
+        review,
+        ready,
+      },
+      active_total,
+      status,
+    };
+  });
+
+  const stuck_tickets: Array<{
+    id: string;
+    title: string;
+    project_name: string;
+    state_name: string;
+    assignee: { id: string; name: string } | null;
+    days_in_state: number;
+    last_updated: string;
+  }> = [];
+
+  for (const t of ticketRows) {
+    const state = statesMap.get(t.stateId);
+    if (!state || state.key === "ready") continue;
+
+    const transitions = transitionRows
+      .filter((tr) => tr.ticketId === t.id)
+      .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const lastDate = transitions[0]?.createdAt ?? t.createdAt;
+    const daysInState = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysInState >= STUCK_AFTER_DAYS) {
+      const project = projectsMap.get(t.projectId);
+      const assigneeUser = t.assigneeId ? usersMap.get(t.assigneeId) : null;
+      stuck_tickets.push({
+        id: t.id,
+        title: t.title,
+        project_name: project?.name ?? "Project",
+        state_name: state?.name ?? "State",
+        assignee: assigneeUser ? { id: assigneeUser.id, name: assigneeUser.name } : null,
+        days_in_state: daysInState,
+        last_updated: lastDate.toISOString(),
+      });
+    }
+  }
+
+  const summary = {
+    total_tickets: ticketRows.length,
+    active_tickets: ticketRows.filter((t) => statesMap.get(t.stateId)?.key !== "ready").length,
+    stuck_tickets_count: stuck_tickets.length,
+    idle_members_count: workload.filter((w) => w.status === "IDLE").length,
+    overload_members_count: workload.filter((w) => w.status === "OVERLOAD").length,
+  };
+
+  return c.json({ summary, workload, stuck_tickets });
 });
 
 // Per-workspace project roles live under /api/users/me/workspaces/:slug.

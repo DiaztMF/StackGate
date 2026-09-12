@@ -79,4 +79,27 @@ describe("plane-compat workspaces", () => {
     const list = (await res.json()) as Array<{ id: string }>;
     expect(Array.isArray(list)).toBe(true);
   });
+
+  it("GET /api/workspaces/stackgate/pm-dashboard returns summary, workload matrix, and stuck alerts", async () => {
+    const app = createApp();
+    const login = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+    });
+    const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const res = await app.request("/api/workspaces/stackgate/pm-dashboard", {
+      headers: { Cookie: ck },
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      summary: { total_tickets: number; stuck_tickets_count: number; idle_members_count: number };
+      workload: Array<{ user: { name: string }; status: string; active_total: number }>;
+      stuck_tickets: Array<{ title: string; days_in_state: number }>;
+    };
+    expect(typeof json.summary.total_tickets).toBe("number");
+    expect(Array.isArray(json.workload)).toBe(true);
+    expect(Array.isArray(json.stuck_tickets)).toBe(true);
+  });
 });
