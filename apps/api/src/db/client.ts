@@ -12,6 +12,10 @@ let cachedPool: Pool | undefined;
 let cachedDb: StackGateDatabase | undefined;
 
 function connectionString(): string {
+  // Under vitest, an isolated test database wins when configured so test
+  // runs never pollute production data. Production (Vercel) never sets
+  // TEST_DATABASE_URL, so this branch is inert there.
+  if (process.env.VITEST && process.env.TEST_DATABASE_URL) return process.env.TEST_DATABASE_URL;
   const value = process.env.DATABASE_URL ?? process.env.TEST_DATABASE_URL;
   if (!value) throw new Error("DATABASE_URL or TEST_DATABASE_URL must be set");
   return value;

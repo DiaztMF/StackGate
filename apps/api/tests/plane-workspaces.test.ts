@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
+import { cleanupTracked, trackProject } from "./cleanup.js";
 
 process.env.JWT_SECRET = "test-secret-32-chars-minimum-xxxx";
+
+afterAll(cleanupTracked);
 
 describe("plane-compat workspaces", () => {
   it("GET /api/workspaces/stackgate/ returns 401 without token (not 404)", async () => {
@@ -61,6 +64,7 @@ describe("plane-compat workspaces", () => {
     expect(res.status).toBe(201);
     const json = (await res.json()) as { id: string; name: string };
     expect(json.name).toBe("Proyek Baru Uji Coba");
+    trackProject(json.id);
   });
 
   it("GET /api/workspaces/stackgate/projects/details/ returns 200 list (not 500 uuid error)", async () => {

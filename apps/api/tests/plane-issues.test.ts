@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
+import { cleanupTracked, trackTicket } from "./cleanup.js";
 
 process.env.JWT_SECRET = "test-secret-32-chars-minimum-xxxx";
+
+afterAll(cleanupTracked);
 
 describe("plane-compat issues", () => {
   it("GET /api/workspaces/stackgate/projects/test/issue-display-properties/ returns 401 without auth", async () => {
@@ -57,6 +60,7 @@ describe("plane-compat issues", () => {
     expect(res.status).toBe(201);
     const json = (await res.json()) as { id: string; name: string };
     expect(json.name).toBe("Tiket Baru Test");
+    trackTicket(json.id);
   });
 
   it("PATCH /api/workspaces/stackgate/projects/:id/issues/:issueId/ rejects student moving to ready", async () => {
@@ -84,6 +88,7 @@ describe("plane-compat issues", () => {
       body: JSON.stringify({ name: "Guard Test" }),
     });
     const ticket = (await createRes.json()) as { id: string };
+    trackTicket(ticket.id);
 
     // Move to ready as student -> should 403
     const patchRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/`, {
@@ -120,6 +125,7 @@ describe("plane-compat issues", () => {
       body: JSON.stringify({ name: "Quality Gate Auto-Seed Test" }),
     });
     const ticket = (await createRes.json()) as { id: string };
+    trackTicket(ticket.id);
 
     const getRes = await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/gate-checks/`, {
       headers: { Cookie: studentCk },
@@ -182,6 +188,7 @@ describe("plane-compat issues", () => {
       body: JSON.stringify({ name: "Research Guard Test", description_html: "<p>Deskripsi tugas</p>" }),
     });
     const ticket = (await createRes.json()) as { id: string };
+    trackTicket(ticket.id);
 
     // Move to in-development and set research_required: true
     await app.request(`/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}/`, {
@@ -256,6 +263,7 @@ describe("plane-compat issues", () => {
     });
     expect(createRes.status).toBe(201);
     const ticket = (await createRes.json()) as { id: string };
+    trackTicket(ticket.id);
     const base = `/api/workspaces/stackgate/projects/${projectId}/issues/${ticket.id}`;
 
     try {

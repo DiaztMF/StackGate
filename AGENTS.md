@@ -100,6 +100,11 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - Default deploy branch is `master`. Never set another branch as production branch.
 - Vercel production branch for `stackgate-web` and `stackgate-api` must be `master`.
 
+# Browser & DevTools Verification
+
+- Whenever verifying or testing in the browser (via Playwright or manual loops), you MUST check DevTools console logs (`playwright_browser_console_messages` level "error") immediately after navigating or interacting. Never rely on visual snapshots alone.
+- Any 4xx/5xx network errors, unhandled exceptions, or console errors must be investigated, traced to their root cause, and resolved before marking work complete.
+
 - Web frontend deploys as static output (`build/client`) to Vercel. Backend API deploys as Vercel Functions with the Node.js runtime. Realtime (`apps/live`) deploys as a persistent Node process on Render (512MB).
 - Required frontend variables: `VITE_API_BASE_URL`, `VITE_WEB_BASE_URL`, `VITE_LIVE_BASE_URL`, `VITE_LIVE_BASE_PATH` (always `/live`).
 - Required live variables: `REDIS_URL` (Upstash, never localhost in production) and `LIVE_SERVER_SECRET_KEY`.
@@ -111,6 +116,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - `apps/web` ships no unit test runner. You must verify web changes with `check:lint` (`oxlint --max-warnings=11957`), `check:types`, `check:format` (`oxfmt --check`), and a production `build`.
 - `apps/live` uses Vitest (`vitest run`, coverage via `@vitest/coverage-v8`). You must add or update tests with every live change and run the suite before committing.
 - The replacement API must cover the transition-guard matrix with Vitest: student rejected from Client Ready, lead rejected with incomplete checklist, ticket without required research link rejected from Review.
+- API tests must never pollute production data: every test that creates rows must register them via `trackTicket`/`trackProject` in `apps/api/tests/cleanup.ts` (auto-deleted in `afterAll`). For full isolation, point `TEST_DATABASE_URL` at a separate Neon branch — under vitest it takes precedence over `DATABASE_URL`.
 - Do not claim a change works without showing the exact command run and its passing output.
 
 # Tailwind CSS
