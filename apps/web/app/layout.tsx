@@ -18,7 +18,9 @@ export default function AppShellLayout() {
   return (
     <ThemeProvider themes={["light", "dark", "light-contrast", "dark-contrast", "custom"]} defaultTheme="system">
       <AppProvider>
-        <div className={cn("relative flex h-screen w-full flex-col overflow-hidden bg-canvas", "desktop-app-container")}>
+        <div
+          className={cn("relative flex h-screen w-full flex-col overflow-hidden bg-canvas", "desktop-app-container")}
+        >
           <main className="relative h-full w-full overflow-hidden">
             <Outlet />
           </main>
