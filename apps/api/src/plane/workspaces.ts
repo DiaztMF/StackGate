@@ -566,6 +566,15 @@ planeWorkspaces.get("/:slug/quick-links", async (c) => {
   return c.json([]);
 });
 
+planeWorkspaces.get("/:slug/stickies", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json({
+    results: [],
+    total_pages: 1,
+  });
+});
+
 planeWorkspaces.post("/:slug/quick-links", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
