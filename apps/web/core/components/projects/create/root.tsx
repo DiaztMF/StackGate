@@ -67,29 +67,8 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
     let uploadedAssetUrl: string | null = null;
 
     if (coverImage) {
-      const imageType = getCoverImageType(coverImage);
-
-      if (imageType === "local_static") {
-        try {
-          uploadedAssetUrl = await uploadCoverImage(coverImage, {
-            workspaceSlug: workspaceSlug.toString(),
-            entityIdentifier: "",
-            entityType: EFileAssetType.PROJECT_COVER,
-            isUserAsset: false,
-          });
-        } catch (error) {
-          console.error("Error uploading cover image:", error);
-          setToast({
-            type: TOAST_TYPE.ERROR,
-            title: t("toast.error"),
-            message: error instanceof Error ? error.message : "Failed to upload cover image",
-          });
-          return Promise.reject(error);
-        }
-      } else {
-        formData.cover_image = coverImage;
-        formData.cover_image_asset = null;
-      }
+      formData.cover_image = coverImage;
+      formData.cover_image_asset = null;
     }
 
     return createProject(workspaceSlug.toString(), formData)

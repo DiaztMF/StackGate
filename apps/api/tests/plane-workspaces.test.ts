@@ -43,4 +43,23 @@ describe("plane-compat workspaces", () => {
     const res = await createApp().request("/api/workspaces/stackgate/user-favorites/?all=true");
     expect(res.status).toBe(401);
   });
+
+  it("POST /api/workspaces/stackgate/projects/ creates a new project with default states", async () => {
+    const app = createApp();
+    const login = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+    });
+    const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const res = await app.request("/api/workspaces/stackgate/projects/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: ck },
+      body: JSON.stringify({ name: "Proyek Baru Uji Coba" }),
+    });
+    expect(res.status).toBe(201);
+    const json = (await res.json()) as { id: string; name: string };
+    expect(json.name).toBe("Proyek Baru Uji Coba");
+  });
 });

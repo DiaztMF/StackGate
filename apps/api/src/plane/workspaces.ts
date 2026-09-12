@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { projectMembers, projects, states, tickets, users, workspaceMembers, workspaces } from "../db/schema.js";
 import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, toPlaneUser, unauthorized } from "./routes.js";
+import { invalidJson, readJson } from "../http.js";
 
 type UserRow = typeof users.$inferSelect;
 type WorkspaceRow = typeof workspaces.$inferSelect;
@@ -133,6 +134,62 @@ planeWorkspaces.get("/:slug/projects", async (c) => {
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   return c.json(await listPlaneProjects(user, ws, user.id));
+});
+
+planeWorkspaces.post("/:slug/projects", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const ws = await resolveWorkspace(c);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+
+  const parsed = await readJson<{ name?: string; identifier?: string; description?: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const name = parsed.body.name?.trim();
+  if (!name) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Nama proyek wajib diisi" } }, 400);
+  }
+
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "") || `project-${Date.now()}`;
+
+  const [newProject] = await db
+    .insert(projects)
+    .values({
+      workspaceId: ws.id,
+      name,
+      slug,
+    })
+    .returning();
+
+  // Otomatis buat 4 state default untuk proyek baru
+  const defaultStates = [
+    { key: "backlog", name: "Backlog", position: "0" },
+    { key: "in-development", name: "In Development", position: "1" },
+    { key: "review", name: "Quality Gate Review", position: "2" },
+    { key: "ready", name: "Client Ready", position: "3" },
+  ];
+
+  await Promise.all(
+    defaultStates.map((s) =>
+      db.insert(states).values({
+        projectId: newProject.id,
+        key: s.key,
+        name: s.name,
+        position: s.position,
+      })
+    )
+  );
+
+  // Otomatis daftarkan user sebagai member project
+  await db.insert(projectMembers).values({
+    projectId: newProject.id,
+    userId: user.id,
+    role: user.role === "student" ? "student" : "lead",
+  });
+
+  return c.json(toPlaneProject(newProject, ws.id, roleNumber(user.role), user.id), 201);
 });
 
 planeWorkspaces.get("/:slug/projects/:projectId", async (c) => {
