@@ -49,7 +49,7 @@ export function toPlaneUser(u: UserRow) {
     is_tour_completed: true,
     mobile_number: null,
     last_workspace_id: DEMO_WORKSPACE_ID,
-    user_timezone: "UTC",
+    user_timezone: "Asia/Jakarta",
     username,
     role: u.role,
     last_login_medium: "email",
@@ -73,7 +73,7 @@ function demoWorkspace(owner: ReturnType<typeof toPlaneUser>) {
     updated_by: owner.id,
     organization_size: "1-10",
     role: 20,
-    timezone: "UTC",
+    timezone: "Asia/Jakarta",
   };
 }
 

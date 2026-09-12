@@ -41,7 +41,7 @@ function toPlaneWorkspace(ws: WorkspaceRow, owner: ReturnType<typeof toPlaneUser
     updated_by: owner.id,
     organization_size: "1-10",
     role: 20,
-    timezone: "UTC",
+    timezone: "Asia/Jakarta",
   };
 }
 
@@ -502,7 +502,7 @@ planeWorkspaces.get("/:slug/user-profile/:userId", async (c) => {
       first_name: targetUser.name,
       last_name: "",
       date_joined: targetUser.createdAt,
-      user_timezone: "UTC",
+      user_timezone: "Asia/Jakarta",
     },
   });
 });
