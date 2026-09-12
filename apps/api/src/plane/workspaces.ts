@@ -541,6 +541,49 @@ planeWorkspaces.get("/:slug/home-preferences", async (c) => {
   if (!user) return unauthorized(c);
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  return c.json([
+    { key: "recents", name: "Recent Activity", is_enabled: true, sort_order: 1 },
+    { key: "quick_links", name: "Quick Links", is_enabled: true, sort_order: 2 },
+    { key: "my_stickies", name: "My Stickies", is_enabled: true, sort_order: 3 },
+  ]);
+});
+
+planeWorkspaces.patch("/:slug/home-preferences/:widgetKey", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const parsed = await readJson<Record<string, unknown>>(c);
+  return c.json({
+    key: c.req.param("widgetKey"),
+    is_enabled: true,
+    sort_order: 1,
+    ...(parsed.ok ? parsed.body : {}),
+  });
+});
+
+planeWorkspaces.get("/:slug/quick-links", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json([]);
+});
+
+planeWorkspaces.post("/:slug/quick-links", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const parsed = await readJson<{ title?: string; url?: string }>(c);
+  return c.json(
+    {
+      id: "quick-link-1",
+      title: parsed.ok ? parsed.body.title : "Link",
+      url: parsed.ok ? parsed.body.url : "",
+      created_at: new Date().toISOString(),
+    },
+    201,
+  );
+});
+
+planeWorkspaces.get("/:slug/recent-visits", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
   return c.json([]);
 });
 
@@ -550,6 +593,30 @@ planeWorkspaces.get("/:slug/user-favorites", async (c) => {
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   return c.json([]);
+});
+
+planeWorkspaces.post("/:slug/user-favorites", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const parsed = await readJson<Record<string, unknown>>(c);
+  return c.json(
+    {
+      id: "fav-1",
+      ...(parsed.ok ? parsed.body : {}),
+    },
+    201,
+  );
+});
+
+planeWorkspaces.get("/:slug/users/notifications", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  return c.json({
+    count: 0,
+    results: [],
+    total_pages: 1,
+    total_results: 0,
+  });
 });
 
 planeWorkspaces.get("/:slug/pm-dashboard", async (c) => {

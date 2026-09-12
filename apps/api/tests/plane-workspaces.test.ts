@@ -131,5 +131,19 @@ describe("plane-compat workspaces", () => {
       body: JSON.stringify({ is_pinned: true, sort_order: 1 }),
     });
     expect(singleRes.status).toBe(200);
+
+    // 3. Home preferences returns default widgets
+    const homePref = await app.request("/api/workspaces/stackgate/home-preferences", {
+      headers: { Cookie: ck },
+    });
+    expect(homePref.status).toBe(200);
+    const widgets = (await homePref.json()) as Array<{ key: string }>;
+    expect(widgets.length).toBe(3);
+
+    // 4. Notifications list returns 200
+    const notifs = await app.request("/api/workspaces/stackgate/users/notifications", {
+      headers: { Cookie: ck },
+    });
+    expect(notifs.status).toBe(200);
   });
 });
