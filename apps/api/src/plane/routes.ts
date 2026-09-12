@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -243,6 +243,23 @@ planeAuth.post("/sign-in", async (c) => {
   await issueSession(c, user);
   if (wantsJson) return c.json(toPlaneUser(user));
   return redirectHome(c, nextPath);
+});
+
+planeAuth.post("/sign-out", async (c) => {
+  const presented = getCookie(c, "sg_refresh");
+  if (presented) {
+    await db
+      .update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(eq(refreshTokens.tokenHash, hashRefreshToken(presented)));
+  }
+  deleteCookie(c, "sg_refresh", {
+    path: "/",
+    sameSite: refreshCookieOptions().sameSite,
+    secure: refreshCookieOptions().secure,
+  });
+  const base = (process.env.WEB_ORIGIN ?? "http://localhost:3000").split(",")[0].trim();
+  return c.redirect(base, 302);
 });
 
 // Plane web identity endpoints under /api/users/me/*. Plane-shaped (no envelope).

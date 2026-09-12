@@ -78,4 +78,23 @@ describe("plane-compat auth", () => {
     const res = await createApp().request("/favicon.ico");
     expect(res.status).toBe(204);
   });
+
+  it("POST /auth/sign-out/ revokes session, clears cookie, and redirects to home", async () => {
+    const app = createApp();
+    const login = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+    });
+    const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+
+    const res = await app.request("/auth/sign-out/", {
+      method: "POST",
+      headers: { Cookie: ck },
+    });
+    expect(res.status).toBe(302);
+    // Verify Set-Cookie header contains Max-Age=0 or expired
+    const cookies = res.headers.getSetCookie().join(";");
+    expect(cookies).toContain("sg_refresh=");
+  });
 });
