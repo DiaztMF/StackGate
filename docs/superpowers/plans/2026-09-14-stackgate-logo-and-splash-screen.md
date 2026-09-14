@@ -83,7 +83,7 @@ Commit: `feat(propel): implement stackgate layered stack and portal vector logo`
 - Consumes: `PlaneLogo` from `@plane/propel/icons`, Tailwind CSS keyframes
 - Produces: Clean SVG animated component `LogoSpinner` replacing raster GIFs
 
-- [ ] **Step 1: Implement `LogoSpinner` with SVG motion**
+- [x] **Step 1: Implement `LogoSpinner` with SVG motion**
 In `apps/web/core/components/common/logo-spinner.tsx`:
 Replace the `<img>` raster gif loader with a pure vector animated spinner:
 - 3 stacked geometric plates with `@keyframes` staggered glide.
@@ -91,14 +91,14 @@ Replace the `<img>` raster gif loader with a pure vector animated spinner:
 - Responsive size (supports small and medium loading contexts).
 - Crisp on high-DPI displays.
 
-- [ ] **Step 2: Verify formatting, types, and build**
+- [x] **Step 2: Verify formatting, types, and build**
 Run:
 `pnpm --filter web fix:format`
 `pnpm --filter web check:types`
 `pnpm --filter web check:lint`
 `pnpm --filter web build`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 Commit: `feat(web): replace raster gif loader with vector animated stackgate splash screen`
 
 ---
