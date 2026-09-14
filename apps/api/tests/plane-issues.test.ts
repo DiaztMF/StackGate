@@ -22,7 +22,7 @@ describe("plane-compat issues", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "siswa@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -44,7 +44,7 @@ describe("plane-compat issues", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "siswa@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -68,7 +68,7 @@ describe("plane-compat issues", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "siswa@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -104,14 +104,14 @@ describe("plane-compat issues", () => {
     const studentLogin = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "siswa@local.dev", password: "password" }),
     });
     const studentCk = studentLogin.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
     const leadLogin = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "lead@local.dev", password: "password" }),
     });
     const leadCk = leadLogin.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -168,7 +168,7 @@ describe("plane-compat issues", () => {
     const studentLogin = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "siswa@local.dev", password: "password" }),
     });
     const studentCk = studentLogin.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -247,7 +247,7 @@ describe("plane-compat issues", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "siswa@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
     const jsonHeaders = { "Content-Type": "application/json", Cookie: ck };

@@ -50,7 +50,7 @@ describe("plane-compat auth", () => {
     const res = await createApp().request("/auth/sign-up/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "siswa@local.dev", password: "password" }),
     });
     expect(res.status).toBe(400);
   });
@@ -60,7 +60,7 @@ describe("plane-compat auth", () => {
     const res = await createApp().request("/auth/sign-up/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password: "dev123456" }),
+      body: JSON.stringify({ email, password: "password" }),
     });
     expect(res.status).toBe(200);
     const json = (await res.json()) as { id: string; email: string };
@@ -84,7 +84,7 @@ describe("plane-compat auth", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "siswa@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "siswa@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 

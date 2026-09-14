@@ -26,8 +26,8 @@ const linkMap = [
   },
   {
     key: "twitter_handle",
-    label: "@planepowers",
-    value: "https://x.com/planepowers",
+    label: "@StackGateDev",
+    value: "https://x.com/StackGateDev",
   },
 ];
 

@@ -4,9 +4,9 @@
   "display": "standalone",
   "scope": "/",
   "start_url": "/",
-  "name": "Plane | Accelerate software development with peace.",
-  "short_name": "Plane",
-  "description": "Plane accelerated the software development by order of magnitude for agencies and product companies.",
+  "name": "StackGate | Modern Project Management & Quality Gate Platform",
+  "short_name": "StackGate",
+  "description": "Modern project management platform with strict quality gates to plan, track, and deliver work items.",
   "icons": [
     {
       "src": "/icon-192x192.png",

@@ -52,7 +52,7 @@ describe("plane-compat workspaces", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "lead@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -72,7 +72,7 @@ describe("plane-compat workspaces", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "lead@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -89,7 +89,7 @@ describe("plane-compat workspaces", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "lead@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
@@ -112,7 +112,7 @@ describe("plane-compat workspaces", () => {
     const login = await app.request("/auth/sign-in/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "lead@local.dev", password: "dev123456" }),
+      body: JSON.stringify({ email: "lead@local.dev", password: "password" }),
     });
     const ck = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 
