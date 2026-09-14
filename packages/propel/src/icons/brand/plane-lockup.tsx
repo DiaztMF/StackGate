@@ -5,16 +5,17 @@
  */
 
 import * as React from "react";
-
 import type { ISvgIcons } from "../type";
+import { PlaneLogo } from "./plane-logo";
 
-export function PlaneLockup({ width = "120", height = "28", className }: ISvgIcons) {
+export function PlaneLockup({ width = "130", height = "32", className }: ISvgIcons) {
   return (
-    <div className={`flex items-center gap-2 font-bold tracking-tight text-primary select-none ${className || ""}`}>
-      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-primary text-xs text-on-color">
-        S
-      </span>
-      <span className="text-base font-semibold tracking-tight">StackGate</span>
+    <div className={`flex items-center gap-2.5 font-bold tracking-tight select-none ${className || ""}`}>
+      <PlaneLogo width="26" height="26" />
+      <div className="flex items-center text-18 leading-none">
+        <span className="font-semibold text-primary">Stack</span>
+        <span className="font-bold text-accent-primary">Gate</span>
+      </div>
     </div>
   );
 }
