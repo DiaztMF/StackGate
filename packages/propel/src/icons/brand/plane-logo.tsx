@@ -11,7 +11,7 @@ import type { ISvgIcons } from "../type";
  * StackGate Official Logo Mark (From Page 2 Design)
  * Combination of 3-layer stack ('S') on the left and geometric 'G' on the right.
  */
-export function PlaneLogo({ width = "40", height = "28", className, color = "currentColor" }: ISvgIcons) {
+export function PlaneLogo({ width = "84", height = "32", className, color = "currentColor" }: ISvgIcons) {
   return (
     <svg
       width={width}

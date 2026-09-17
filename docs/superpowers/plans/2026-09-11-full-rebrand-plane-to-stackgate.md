@@ -64,25 +64,25 @@ Commit: `feat(web): rebrand auth screen copy and brand lockup to stackgate`
 - Modify: `packages/i18n/src/locales/en/workspace.json`
 - Modify: `packages/i18n/src/locales/en/auth.json`
 
-- [ ] **Step 1: Update `home.json`**
+- [x] **Step 1: Update `home.json`**
 
 In `packages/i18n/src/locales/en/home.json`:
 - `"Most things start with a project in Plane."` -> `"Most things start with a project in StackGate."`
 - `"Make Plane yours."` -> `"Customize StackGate."`
 
-- [ ] **Step 2: Update `workspace.json`**
+- [x] **Step 2: Update `workspace.json`**
 
 In `packages/i18n/src/locales/en/workspace.json`:
 - `"To start using Plane, you need to create or join a workspace."` -> `"To start using StackGate, you need to create or join a workspace."`
 - `"Welcome to Plane, we are excited to have you here."` -> `"Welcome to StackGate, we are excited to have you here."`
 - `"Everything starts with a project in Plane"` -> `"Everything starts with a project in StackGate"`
 
-- [ ] **Step 3: Update `auth.json`**
+- [x] **Step 3: Update `auth.json`**
 
 In `packages/i18n/src/locales/en/auth.json`:
 - `"new_to_plane": "New to Plane?"` -> `"new_to_plane": "New to StackGate?"`
 
-- [ ] **Step 4: Build i18n package and verify web types**
+- [x] **Step 4: Build i18n package and verify web types**
 
 Run: `pnpm --filter @plane/i18n build && pnpm --filter web check:types`
 Commit: `feat(i18n): update dashboard and workspace copy to stackgate`
