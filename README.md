@@ -1,90 +1,96 @@
 # StackGate
 
-Ticket-based project management for software houses that use intern developers. Frontend forked from Plane (`apps/web`, UI reused 1:1), backend replaced with a lightweight Hono API.
+A high-performance, ticket-based project management system tailored for software houses managing intern developers, featuring strict state transition gates and lightweight Hono API architecture.
 
-## Pages / Routes
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Frontend](https://img.shields.io/badge/Frontend-Plane%20SPA%20Fork-teal)](#architecture--development-guides)
+[![Backend](https://img.shields.io/badge/Backend-Hono%20API-orange)](https://hono.dev/)
+[![Database](https://img.shields.io/badge/Database-Neon%20Postgres-green)](https://neon.tech/)
 
-| Route | Page | Description |
-|---|---|---|
-| `/` | Web app | Plane SPA: workspaces, projects, kanban boards, cycles, modules, pages |
-| `/api/health` | API health | Returns `{"data":{"ok":true}}` |
-| `/api/auth/*` | Auth | Login, refresh rotation, logout, me |
-| `/api/projects/:id/tickets` | Tickets | List and create tickets per project |
-| `/api/tickets/:id/transition` | Gate | State transitions with role enforcement |
+## Installation
 
-## Project Structure
+Clone the repository and install root monorepo dependencies:
 
-```text
-src/  # (monorepo root, no src/ dir — layout below)
-apps/
-  web/        # Plane SPA fork (React Router, port 3000) — UI 1:1
-  api/        # Hono replacement backend (port 8000, Vercel Functions)
-    src/
-      app.ts        # App wiring: CORS, routes, error shape
-      auth/         # JWT access (15m) + refresh rotation (7d)
-      tickets/      # CRUD + transition guard matrix
-      db/           # Drizzle schema, Neon client, dev seed
-    api/index.ts    # Vercel Node (req,res) handler entry
-    tests/          # Vitest: health, auth, db, tickets, guards
-  live/         # Hocuspocus/Yjs realtime server (Plan 03, Render)
-packages/
-  services/src/stackgate/  # FE adapter: client, auth, tickets
-  ui|types|utils|...       # Shared Plane packages
-docs/superpowers/
-  specs/  # Design spec
-  plans/  # Implementation plans
+```bash
+git clone https://github.com/DiaztMF/StackGate.git
+cd StackGate
+pnpm install
 ```
-
-## Tech Stack
-
-- **React Router 8 + React 19 + Vite 8** — SPA fork, static deploy
-- **Hono 4** — API ringan, cold-start kecil di serverless
-- **Drizzle + Neon Postgres** — schema 12 tabel, `pg` Pool + `attachDatabasePool`
-- **Upstash Redis** — session/rate-limit (Plan 03 live)
-- **Vitest** — guard matrix regression tests
-
-## Scripts
-
-| Script | Command | Description |
-|---|---|---|
-| Web dev | `pnpm --filter web dev` | React Router dev, port 3000 |
-| API dev | `pnpm --filter stackgate-api dev` | Hono local, port 8000 |
-| API tests | `pnpm --filter stackgate-api test` | Vitest suite |
-| Typecheck | `pnpm --filter <pkg> check:types` | `tsc --noEmit` |
-| Lint | `pnpm --filter <pkg> check:lint` | oxlint, zero-warning budget |
-| Web build | `pnpm --filter web build` | Emits `build/client` |
-| DB migrate | `pnpm --filter stackgate-api db:migrate` | drizzle-kit migrate |
-| DB seed | `pnpm --filter stackgate-api db:seed` | Dev data (`ALLOW_DEV_SEED=1`) |
 
 ## Quick Start
 
-```bash
-npm install -g pnpm@11.10.0
-pnpm install --no-frozen-lockfile
-pnpm exec turbo run build --filter=./packages/*
-```
-
-Copy `apps/api/.env.example` to `apps/api/.env`, fill `DATABASE_URL` (Neon pooled) and `JWT_SECRET` (32+ chars), then:
+1. Create your backend environment configuration in `apps/api/.env`:
 
 ```bash
-pnpm --filter stackgate-api db:migrate
-ALLOW_DEV_SEED=1 pnpm --filter stackgate-api db:seed
-pnpm --filter stackgate-api dev
-pnpm --filter web dev
+DATABASE_URL="postgresql://user:password@endpoint.neon.tech/neondb?sslmode=require"
+JWT_SECRET="your-secure-jwt-secret"
+JWT_REFRESH_SECRET="your-secure-refresh-secret"
+FRONTEND_URL="http://localhost:3000"
 ```
 
-Seed logins: `pm@local.dev`, `lead@local.dev`, `siswa@local.dev` (password `dev123456`).
+2. Push Drizzle schema and start the fullstack workspace:
 
-## Ticket States
+```bash
+# Terminal 1: API backend
+cd apps/api
+pnpm dev
 
-`Backlog` → `In Development` → `Quality Gate Review` → `Client Ready`. Students move forward to Review only; only leads close to Client Ready with a complete gate checklist. Research links marked required block entry to Review. Enforced server-side in `apps/api/src/tickets/guard.ts`.
+# Terminal 2: Web frontend
+cd apps/web
+pnpm dev
+```
 
-## Deployment
+Visit [http://localhost:3000](http://localhost:3000) to access the workspace board.
 
-- API: `https://stackgate-api.vercel.app` (Vercel Functions, Node runtime, manual `(req,res)` adapter in `apps/api/api/index.ts` + `vercel.json` rewrite)
-- Web: `https://stackgate-web.vercel.app` (static `build/client`, baked `VITE_API_BASE_URL`)
-- Required API env: `DATABASE_URL`, `JWT_SECRET`, `WEB_ORIGIN`, `COOKIE_CROSS_SITE=1` in production
+## What is StackGate?
 
-## Contributing
+`StackGate` is an engineered project tracking platform designed to mitigate code quality risks when supervising intern and junior developers. It wraps a fork of Plane's rich React interface (`apps/web`) with a custom, lightweight Hono backend (`apps/api`) that enforces strict state machine transitions before tickets can advance to code review, QA, or production deployment.
 
-See `AGENTS.md` for conventions, gates, and deployment rules.
+## Why StackGate?
+
+Standard issue trackers like Jira or Trello allow arbitrary drag-and-drop state changes, leading to premature merging and unreviewed production releases. `StackGate` introduces strict server-side transition guards and audit trails that block unqualified progress until defined quality criteria and mentor sign-offs are satisfied.
+
+## API / Routes
+
+### Hono API Endpoints
+- `GET /api/health`: Health status probe returning `{"data":{"ok":true}}`.
+- `POST /api/auth/login`: Authenticates user credentials and issues access/refresh token pairs.
+- `POST /api/auth/refresh`: Rotates refresh tokens and issues fresh 15-minute access JWTs.
+- `GET /api/projects/:id/tickets`: Lists tickets scoped to project permissions.
+- `POST /api/tickets/:id/transition`: Validates and triggers state changes against the transition guard matrix.
+
+## Examples
+
+Executing a controlled ticket transition via the Hono client:
+
+```typescript
+export async function advanceTicketState(ticketId: string, targetState: 'IN_REVIEW' | 'COMPLETED', token: string) {
+  const response = await fetch(`/api/tickets/${ticketId}/transition`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ targetState }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Transition disallowed by guard matrix');
+  }
+
+  return await response.json();
+}
+```
+
+## Architecture & Development Guides
+
+- Monorepo Architecture:
+  - `apps/web`: Plane SPA fork (React Router, Tailwind CSS) operating on port 3000.
+  - `apps/api`: Zero-bloat Hono backend with Drizzle ORM and Neon Postgres on port 8000.
+- State Gate Matrix: State enforcement codified under `apps/api/src/tickets/`.
+- Auth Lifecycle: 15-minute stateless JWT access tokens backed by rotating 7-day refresh tokens.
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for full details.
