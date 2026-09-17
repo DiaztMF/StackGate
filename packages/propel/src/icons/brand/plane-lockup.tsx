@@ -8,13 +8,13 @@ import * as React from "react";
 import type { ISvgIcons } from "../type";
 import { PlaneLogo } from "./plane-logo";
 
-export function PlaneLockup({ width = "130", height = "32", className }: ISvgIcons) {
+export function PlaneLockup({ width = "135", height = "28", className }: ISvgIcons) {
   return (
     <div className={`flex items-center gap-2.5 font-bold tracking-tight select-none ${className || ""}`}>
-      <PlaneLogo width="26" height="26" />
-      <div className="flex items-center text-18 leading-none">
-        <span className="font-semibold text-primary">Stack</span>
-        <span className="font-bold text-accent-primary">Gate</span>
+      <PlaneLogo width="32" height="18" className="text-primary" />
+      <div className="flex items-center text-18 leading-none text-primary">
+        <span className="font-semibold">Stack</span>
+        <span className="font-bold">Gate</span>
       </div>
     </div>
   );
