@@ -210,4 +210,41 @@ describe("admin project management", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("renames and archives, then unarchives a project", async () => {
+    const app = createApp();
+    const cookie = await createSuperadminAndSignIn(app);
+    const createRes = await app.request("/api/admin/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: `Archive Test ${Date.now()}` }),
+    });
+    const created = (await createRes.json()) as { data: { project: { id: string } } };
+    trackProject(created.data.project.id);
+
+    const renameRes = await app.request(`/api/admin/projects/${created.data.project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: "Renamed Project" }),
+    });
+    expect(renameRes.status).toBe(200);
+    const renamed = (await renameRes.json()) as { data: { project: { name: string } } };
+    expect(renamed.data.project.name).toBe("Renamed Project");
+
+    const archiveRes = await app.request(`/api/admin/projects/${created.data.project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ archived: true }),
+    });
+    const archived = (await archiveRes.json()) as { data: { project: { archivedAt: string | null } } };
+    expect(archived.data.project.archivedAt).not.toBeNull();
+
+    const unarchiveRes = await app.request(`/api/admin/projects/${created.data.project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ archived: false }),
+    });
+    const unarchived = (await unarchiveRes.json()) as { data: { project: { archivedAt: string | null } } };
+    expect(unarchived.data.project.archivedAt).toBeNull();
+  });
 });

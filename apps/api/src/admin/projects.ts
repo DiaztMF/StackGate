@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { projectMembers, projects, workspaces } from "../db/schema.js";
 import { invalidJson, readJson } from "../http.js";
@@ -49,6 +50,33 @@ adminProjects.post("/projects", requireSuperadmin, async (c) => {
   // Superadmin manages every project without needing to be a member of it —
   // no projectMembers row is created here, unlike the Plane-compat endpoint.
   return c.json({ data: { project: publicProject(created, 0) } }, 201);
+});
+
+adminProjects.patch("/projects/:id", requireSuperadmin, async (c) => {
+  const projectId = c.req.param("id");
+  const [existing] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+  if (!existing) return c.json({ error: { code: "NOT_FOUND", message: "Proyek tidak ditemukan" } }, 404);
+
+  const parsed = await readJson<{ name?: string; archived?: boolean }>(c);
+  if (!parsed.ok) return invalidJson(c);
+
+  const updates: Partial<typeof projects.$inferInsert> = {};
+  if (parsed.body.name !== undefined) {
+    const trimmed = parsed.body.name.trim();
+    if (!trimmed) return c.json({ error: { code: "VALIDATION_ERROR", message: "Nama proyek tidak boleh kosong" } }, 400);
+    updates.name = trimmed;
+  }
+  if (typeof parsed.body.archived === "boolean") {
+    updates.archivedAt = parsed.body.archived ? new Date() : null;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    const memberRows = await db.select().from(projectMembers).where(eq(projectMembers.projectId, projectId));
+    return c.json({ data: { project: publicProject(existing, memberRows.length) } });
+  }
+  const [updated] = await db.update(projects).set(updates).where(eq(projects.id, projectId)).returning();
+  const memberRows = await db.select().from(projectMembers).where(eq(projectMembers.projectId, projectId));
+  return c.json({ data: { project: publicProject(updated, memberRows.length) } });
 });
 
 export default adminProjects;
