@@ -73,3 +73,106 @@ describe("requireSuperadmin guard", () => {
     expect(body.data.users[0]).not.toHaveProperty("passwordHash");
   });
 });
+
+describe("admin user management", () => {
+  it("creates a user with a valid role", async () => {
+    const app = createApp();
+    const cookie = await createSuperadminAndSignIn(app);
+    const email = `created-${Date.now()}@local.dev`;
+    const res = await app.request("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ email, name: "Created User", password: "password123", role: "lead" }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { user: { id: string; role: string } } };
+    expect(body.data.user.role).toBe("lead");
+    expect(body.data.user).not.toHaveProperty("passwordHash");
+    createdUserIds.push(body.data.user.id);
+  });
+
+  it("rejects creating a user with an invalid role", async () => {
+    const app = createApp();
+    const cookie = await createSuperadminAndSignIn(app);
+    const res = await app.request("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ email: `bad-${Date.now()}@local.dev`, name: "Bad", password: "password123", role: "owner" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("updates a user's role", async () => {
+    const app = createApp();
+    const cookie = await createSuperadminAndSignIn(app);
+    const createRes = await app.request("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ email: `patch-${Date.now()}@local.dev`, name: "Patch Target", password: "password123", role: "student" }),
+    });
+    const created = (await createRes.json()) as { data: { user: { id: string } } };
+    createdUserIds.push(created.data.user.id);
+
+    const patchRes = await app.request(`/api/admin/users/${created.data.user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ role: "lead" }),
+    });
+    expect(patchRes.status).toBe(200);
+    const patched = (await patchRes.json()) as { data: { user: { role: string } } };
+    expect(patched.data.user.role).toBe("lead");
+  });
+
+  it("resets a user's password and the new password logs in", async () => {
+    const app = createApp();
+    const cookie = await createSuperadminAndSignIn(app);
+    const email = `reset-${Date.now()}@local.dev`;
+    const createRes = await app.request("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ email, name: "Reset Target", password: "originalpass", role: "student" }),
+    });
+    const created = (await createRes.json()) as { data: { user: { id: string } } };
+    createdUserIds.push(created.data.user.id);
+
+    const resetRes = await app.request(`/api/admin/users/${created.data.user.id}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ password: "brandnewpass" }),
+    });
+    expect(resetRes.status).toBe(200);
+
+    const loginRes = await app.request("/auth/sign-in/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: "brandnewpass" }),
+    });
+    expect(loginRes.status).toBe(200);
+  });
+
+  it("refuses to let the only active superadmin demote themselves", async () => {
+    const app = createApp();
+    const email = `lonely-admin-${Date.now()}@local.dev`;
+    const [row] = await db
+      .insert(users)
+      .values({ email, name: "Lonely Admin", role: "superadmin", passwordHash: await hashPassword("password123") })
+      .returning();
+    createdUserIds.push(row.id);
+    const cookie = await signIn(app, email, "password123");
+
+    // Demote every OTHER superadmin so this one really is the last, deterministically.
+    const otherAdmins = await db.select({ id: users.id }).from(users).where(eq(users.role, "superadmin"));
+    const others = otherAdmins.filter((u) => u.id !== row.id);
+    await Promise.all(others.map((u) => db.update(users).set({ role: "pm" }).where(eq(users.id, u.id))));
+
+    const res = await app.request(`/api/admin/users/${row.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ role: "pm" }),
+    });
+    expect(res.status).toBe(422);
+
+    // Restore the other superadmins so this test doesn't corrupt shared seed data.
+    await Promise.all(others.map((u) => db.update(users).set({ role: "superadmin" }).where(eq(users.id, u.id))));
+  });
+});
