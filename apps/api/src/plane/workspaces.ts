@@ -3,12 +3,15 @@ import type { Context } from "hono";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { projectMembers, projects, states, tickets, ticketTransitions, users, workspaceMembers, workspaces } from "../db/schema.js";
-import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, toPlaneUser, unauthorized } from "./routes.js";
+import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, toPlaneUser, unauthorized, workspaceRoleNumber } from "./routes.js";
 import { invalidJson, readJson } from "../http.js";
 
 type UserRow = typeof users.$inferSelect;
 type WorkspaceRow = typeof workspaces.$inferSelect;
 
+// Inside a project a student works like any member: they own tickets, edit
+// descriptions and move them through the gate. Workspace-level role (guest
+// vs member vs admin) is workspaceRoleNumber, imported from routes.ts.
 function roleNumber(role: UserRow["role"]): number {
   return role === "pm" ? 20 : 15;
 }
@@ -25,7 +28,7 @@ async function resolveWorkspace(c: Context): Promise<WorkspaceRow | null> {
   return ws ?? null;
 }
 
-function toPlaneWorkspace(ws: WorkspaceRow, owner: ReturnType<typeof toPlaneUser>) {
+function toPlaneWorkspace(ws: WorkspaceRow, owner: ReturnType<typeof toPlaneUser>, viewerRole: number) {
   const at = ws.createdAt.toISOString();
   return {
     id: ws.id,
@@ -40,7 +43,7 @@ function toPlaneWorkspace(ws: WorkspaceRow, owner: ReturnType<typeof toPlaneUser
     created_by: owner.id,
     updated_by: owner.id,
     organization_size: "1-10",
-    role: 20,
+    role: viewerRole,
     timezone: "Asia/Jakarta",
   };
 }
@@ -60,7 +63,7 @@ planeWorkspaces.get("/:slug", async (c) => {
   if (!user) return unauthorized(c);
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
-  return c.json(toPlaneWorkspace(ws, toPlaneUser(user)));
+  return c.json(toPlaneWorkspace(ws, toPlaneUser(user), workspaceRoleNumber(user.role)));
 });
 
 planeWorkspaces.get("/:slug/workspace-members/me", async (c) => {
@@ -81,7 +84,7 @@ planeWorkspaces.get("/:slug/workspace-members/me", async (c) => {
     default_props: emptyViewProps(),
     id: membership?.id ?? `${ws.id}:${user.id}`,
     member: user.id,
-    role: membership ? roleNumber(membership.role) : roleNumber(user.role),
+    role: workspaceRoleNumber(membership ? membership.role : user.role),
     updated_at: now,
     updated_by: user.id,
     view_props: emptyViewProps(),
@@ -106,11 +109,14 @@ function toPlaneProject(
     member_role: memberRole,
     archived_at: null,
     workspace: wsId,
-    cycle_view: true,
-    issue_views_view: true,
-    module_view: true,
-    page_view: true,
-    inbox_view: true,
+    // Cycles, views, pages and intake are Plane features this API does not
+    // implement. Flagging them off removes their sidebar entries and menus
+    // rather than leaving links that open empty screens.
+    cycle_view: false,
+    issue_views_view: false,
+    module_view: false,
+    page_view: false,
+    inbox_view: false,
     guest_view_all_features: false,
     project_lead: null,
     network: 0,
@@ -142,6 +148,9 @@ planeWorkspaces.get("/:slug/projects", async (c) => {
 planeWorkspaces.post("/:slug/projects", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
+  if (user.role === "student") {
+    return c.json({ error: { code: "FORBIDDEN", message: "Hanya lead atau PM yang boleh membuat proyek" } }, 403);
+  }
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
 
@@ -185,11 +194,11 @@ planeWorkspaces.post("/:slug/projects", async (c) => {
     )
   );
 
-  // Otomatis daftarkan user sebagai member project
+  // Otomatis daftarkan pembuatnya sebagai member project (hanya lead/pm sampai sini)
   await db.insert(projectMembers).values({
     projectId: newProject.id,
     userId: user.id,
-    role: user.role === "student" ? "student" : "lead",
+    role: user.role,
   });
 
   return c.json(toPlaneProject(newProject, ws.id, roleNumber(user.role), user.id), 201);
@@ -254,6 +263,8 @@ planeWorkspaces.get("/:slug/projects/:projectId/states", async (c) => {
       default: s.key === "backlog",
       description: "",
       group: style.group,
+      // StackGate's transition guard keys off this, not the Plane group
+      key: s.key,
       name: s.name,
       project_id: projectId,
       sequence: i,
@@ -365,6 +376,7 @@ planeWorkspaces.get("/:slug/states", async (c) => {
     default: boolean;
     description: string;
     group: string;
+    key: string;
     name: string;
     project_id: string;
     sequence: number;
@@ -381,6 +393,7 @@ planeWorkspaces.get("/:slug/states", async (c) => {
         default: s.key === "backlog",
         description: "",
         group: style.group,
+        key: s.key,
         name: s.name,
         project_id: p.id,
         sequence: i,
@@ -410,7 +423,7 @@ planeWorkspaces.get("/:slug/members", async (c) => {
         is_bot: false,
         last_name: "",
       },
-      role: roleNumber(u.role),
+      role: workspaceRoleNumber(u.role),
     })),
   );
 });

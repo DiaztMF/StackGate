@@ -20,8 +20,11 @@ import { cn } from "@plane/utils";
 import { DropdownButton } from "@/components/dropdowns/buttons";
 import { BUTTON_VARIANTS_WITH_TEXT } from "@/components/dropdowns/constants";
 import type { TDropdownProps } from "@/components/dropdowns/types";
+// helpers
+import { getStateKey, stateTransitionBlockedReason } from "@/helpers/transition-guard.helper";
 // hooks
 import { useDropdown } from "@/hooks/use-dropdown";
+import { useUser } from "@/hooks/store/user";
 // plane web imports
 import { StateOption } from "@/components/workflow";
 
@@ -60,6 +63,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
     getStateById,
     hideIcon = false,
     iconSize = "size-4",
+    isForWorkItemCreation = false,
     isInitializing = false,
     onChange,
     onClose,
@@ -83,6 +87,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
   const [isOpen, setIsOpen] = useState(false);
   // store hooks
   const { t } = useTranslation();
+  const { data: currentUser } = useUser();
   const statesList = stateIds.map((stateId) => getStateById(stateId)).filter((state) => !!state);
   const defaultState = statesList?.find((state) => state?.default);
   const stateValue = value ? value : showDefaultState ? defaultState?.id : undefined;
@@ -131,6 +136,12 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
     query === "" ? options : options?.filter((o) => o.query.toLowerCase().includes(query.toLowerCase()));
 
   const selectedState = stateValue ? getStateById(stateValue) : undefined;
+  // Grey out the moves StackGate's quality gate would reject for this user.
+  const currentStateKey = getStateKey(selectedState);
+  const blockedReasonFor = (targetStateId: string | undefined) =>
+    isForWorkItemCreation
+      ? null
+      : stateTransitionBlockedReason(currentUser?.role, currentStateKey, getStateKey(getStateById(targetStateId)));
 
   const dropdownOnChange = (val: string) => {
     onChange(val);
@@ -243,6 +254,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
                       key={option.value}
                       option={option}
                       selectedValue={value}
+                      blockedReason={blockedReasonFor(option.value)}
                       className="flex w-full cursor-pointer items-center justify-between gap-2 truncate rounded-sm px-1 py-1.5 select-none"
                     />
                   ))

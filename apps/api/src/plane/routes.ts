@@ -31,6 +31,16 @@ function refreshCookieOptions(): {
   };
 }
 
+// Plane permission levels: 20 Admin, 15 Member, 5 Guest. At workspace level a
+// student is a guest, which hides workspace-wide admin affordances (creating
+// projects, workspace settings, exports) instead of showing buttons the API
+// then rejects. Project membership keeps them a full member — see roleNumber
+// in workspaces.ts.
+export function workspaceRoleNumber(role: UserRow["role"]): number {
+  if (role === "pm") return 20;
+  return role === "lead" ? 15 : 5;
+}
+
 export function toPlaneUser(u: UserRow) {
   const username = u.email.includes("@") ? u.email.split("@")[0] : u.email;
   return {
@@ -57,7 +67,7 @@ export function toPlaneUser(u: UserRow) {
   };
 }
 
-function demoWorkspace(owner: ReturnType<typeof toPlaneUser>) {
+function demoWorkspace(owner: ReturnType<typeof toPlaneUser>, viewerRole: number) {
   const now = new Date().toISOString();
   return {
     id: DEMO_WORKSPACE_ID,
@@ -72,7 +82,7 @@ function demoWorkspace(owner: ReturnType<typeof toPlaneUser>) {
     created_by: owner.id,
     updated_by: owner.id,
     organization_size: "1-10",
-    role: 20,
+    role: viewerRole,
     timezone: "Asia/Jakarta",
   };
 }
@@ -316,7 +326,7 @@ planeUsers.get("/me/settings", async (c) => {
 planeUsers.get("/me/workspaces", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
-  return c.json([demoWorkspace(toPlaneUser(user))]);
+  return c.json([demoWorkspace(toPlaneUser(user), workspaceRoleNumber(user.role))]);
 });
 
 planeUsers.get("/me/accounts", async (c) => {

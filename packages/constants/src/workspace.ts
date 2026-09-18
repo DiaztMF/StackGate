@@ -247,7 +247,9 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     key: "your_work",
     labelTranslationKey: "your_work",
     href: `/profile/`,
-    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    // StackGate maps students onto the workspace guest role so workspace-wide
+    // admin actions stay hidden. They still need their own work view.
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
   stickies: {
