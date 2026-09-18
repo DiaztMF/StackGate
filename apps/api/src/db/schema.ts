@@ -2,6 +2,8 @@ import { boolean, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-
 
 export const roleEnum = pgEnum("role", ["student", "lead", "pm"]);
 
+export const priorityEnum = pgEnum("priority", ["urgent", "high", "medium", "low", "none"]);
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
@@ -56,6 +58,9 @@ export const tickets = pgTable("tickets", {
   assigneeId: uuid("assignee_id").references(() => users.id),
   reporterId: uuid("reporter_id").references(() => users.id),
   researchRequired: boolean("research_required").notNull().default(false),
+  priority: priorityEnum("priority").notNull().default("none"),
+  startDate: timestamp("start_date", { mode: "string" }),
+  targetDate: timestamp("target_date", { mode: "string" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

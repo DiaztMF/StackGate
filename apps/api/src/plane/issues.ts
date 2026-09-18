@@ -24,6 +24,19 @@ const DEFAULT_GATE_ITEMS = [
   "Sudah self-test oleh pelaksana",
 ];
 
+const PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
+type TPriority = (typeof PRIORITIES)[number];
+
+function isPriority(value: unknown): value is TPriority {
+  return typeof value === "string" && (PRIORITIES as readonly string[]).includes(value);
+}
+
+// Plane sends and expects bare calendar dates ("2026-09-17"); Postgres hands
+// back a full timestamp string, so trim it at the boundary.
+function toDateOnly(value: string | null): string | null {
+  return value ? value.slice(0, 10) : null;
+}
+
 export function toBaseIssue(t: typeof tickets.$inferSelect, seq: number) {
   return {
     id: t.id,
@@ -31,7 +44,7 @@ export function toBaseIssue(t: typeof tickets.$inferSelect, seq: number) {
     name: t.title,
     sort_order: 65535,
     state_id: t.stateId,
-    priority: "none",
+    priority: t.priority,
     label_ids: [],
     assignee_ids: t.assigneeId ? [t.assigneeId] : [],
     estimate_point: null,
@@ -45,8 +58,8 @@ export function toBaseIssue(t: typeof tickets.$inferSelect, seq: number) {
     type_id: null,
     created_at: t.createdAt.toISOString(),
     updated_at: t.createdAt.toISOString(),
-    start_date: null,
-    target_date: null,
+    start_date: toDateOnly(t.startDate),
+    target_date: toDateOnly(t.targetDate),
     completed_at: null,
     archived_at: null,
     created_by: t.reporterId ?? "",
@@ -67,7 +80,9 @@ planeIssues.get("/:slug/projects/:projectId/issue-display-properties", async (c)
       assignee: true,
       start_date: true,
       due_date: true,
-      labels: true,
+      // no label / estimate / cycle / module storage in this API — keep the
+      // controls out of the UI instead of shipping dropdowns that cannot save
+      labels: false,
       key: true,
       priority: true,
       state: true,
@@ -135,7 +150,14 @@ planeIssues.post("/:slug/projects/:projectId/issues", async (c) => {
     return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   }
 
-  const parsed = await readJson<{ name?: string; description_html?: string; assignee_ids?: string[] }>(c);
+  const parsed = await readJson<{
+    name?: string;
+    description_html?: string;
+    assignee_ids?: string[];
+    priority?: string;
+    start_date?: string | null;
+    target_date?: string | null;
+  }>(c);
   if (!parsed.ok) return invalidJson(c);
 
   const name = parsed.body.name?.trim();
@@ -163,6 +185,9 @@ planeIssues.post("/:slug/projects/:projectId/issues", async (c) => {
       assigneeId,
       reporterId: user.id,
       researchRequired: false,
+      priority: isPriority(parsed.body.priority) ? parsed.body.priority : "none",
+      startDate: parsed.body.start_date ?? null,
+      targetDate: parsed.body.target_date ?? null,
     })
     .returning();
 
@@ -201,6 +226,9 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
     description_html?: string;
     assignee_ids?: string[];
     research_required?: boolean;
+    priority?: string;
+    start_date?: string | null;
+    target_date?: string | null;
   }>(c);
   if (!parsed.ok) return invalidJson(c);
 
@@ -214,6 +242,15 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
   }
   if (typeof parsed.body.research_required === "boolean") {
     updates.researchRequired = parsed.body.research_required;
+  }
+  if (isPriority(parsed.body.priority)) {
+    updates.priority = parsed.body.priority;
+  }
+  if (parsed.body.start_date !== undefined) {
+    updates.startDate = parsed.body.start_date;
+  }
+  if (parsed.body.target_date !== undefined) {
+    updates.targetDate = parsed.body.target_date;
   }
 
   if (parsed.body.state_id && parsed.body.state_id !== ticket.stateId) {
@@ -243,6 +280,11 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
     });
   }
 
+  // A PATCH carrying only fields this API does not model would leave `updates`
+  // empty, and Drizzle rejects an empty SET — echo the ticket back instead.
+  if (Object.keys(updates).length === 0) {
+    return c.json(toBaseIssue(ticket, 1));
+  }
   const [updated] = await db.update(tickets).set(updates).where(eq(tickets.id, issueId)).returning();
   return c.json(toBaseIssue(updated, 1));
 });
