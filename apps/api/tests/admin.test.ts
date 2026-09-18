@@ -247,4 +247,59 @@ describe("admin project management", () => {
     const unarchived = (await unarchiveRes.json()) as { data: { project: { archivedAt: string | null } } };
     expect(unarchived.data.project.archivedAt).toBeNull();
   });
+
+  it("manages project membership: add, list, change role, remove", async () => {
+    const app = createApp();
+    const cookie = await createSuperadminAndSignIn(app);
+    const projectRes = await app.request("/api/admin/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: `Membership Test ${Date.now()}` }),
+    });
+    const project = (await projectRes.json()) as { data: { project: { id: string } } };
+    trackProject(project.data.project.id);
+
+    const [student] = await db.select().from(users).where(eq(users.email, "siswa@local.dev")).limit(1);
+
+    const addRes = await app.request(`/api/admin/projects/${project.data.project.id}/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ userId: student.id, role: "student" }),
+    });
+    expect(addRes.status).toBe(201);
+
+    const listRes = await app.request(`/api/admin/projects/${project.data.project.id}/members`, {
+      headers: { Cookie: cookie },
+    });
+    const list = (await listRes.json()) as { data: { members: Array<{ userId: string; role: string }> } };
+    expect(list.data.members.some((m) => m.userId === student.id)).toBe(true);
+
+    const dupRes = await app.request(`/api/admin/projects/${project.data.project.id}/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ userId: student.id, role: "student" }),
+    });
+    expect(dupRes.status).toBe(400);
+
+    const patchRes = await app.request(`/api/admin/projects/${project.data.project.id}/members/${student.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ role: "lead" }),
+    });
+    expect(patchRes.status).toBe(200);
+    const patched = (await patchRes.json()) as { data: { member: { role: string } } };
+    expect(patched.data.member.role).toBe("lead");
+
+    const deleteRes = await app.request(`/api/admin/projects/${project.data.project.id}/members/${student.id}`, {
+      method: "DELETE",
+      headers: { Cookie: cookie },
+    });
+    expect(deleteRes.status).toBe(200);
+
+    const listAfterRes = await app.request(`/api/admin/projects/${project.data.project.id}/members`, {
+      headers: { Cookie: cookie },
+    });
+    const listAfter = (await listAfterRes.json()) as { data: { members: Array<{ userId: string }> } };
+    expect(listAfter.data.members.some((m) => m.userId === student.id)).toBe(false);
+  });
 });

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projectMembers, projects, workspaces } from "../db/schema.js";
+import { projectMembers, projects, users, workspaces } from "../db/schema.js";
 import { invalidJson, readJson } from "../http.js";
 import { createDefaultProjectStates } from "../plane/workspaces.js";
 import { requireSuperadmin } from "./guard.js";
@@ -77,6 +77,87 @@ adminProjects.patch("/projects/:id", requireSuperadmin, async (c) => {
   const [updated] = await db.update(projects).set(updates).where(eq(projects.id, projectId)).returning();
   const memberRows = await db.select().from(projectMembers).where(eq(projectMembers.projectId, projectId));
   return c.json({ data: { project: publicProject(updated, memberRows.length) } });
+});
+
+const VALID_MEMBER_ROLES = ["student", "lead", "pm", "superadmin"] as const;
+type TMemberRole = (typeof VALID_MEMBER_ROLES)[number];
+
+function isValidMemberRole(value: unknown): value is TMemberRole {
+  return typeof value === "string" && (VALID_MEMBER_ROLES as readonly string[]).includes(value);
+}
+
+adminProjects.get("/projects/:id/members", requireSuperadmin, async (c) => {
+  const projectId = c.req.param("id");
+  const rows = await db
+    .select({ id: projectMembers.id, userId: projectMembers.userId, role: projectMembers.role })
+    .from(projectMembers)
+    .where(eq(projectMembers.projectId, projectId));
+  const allUsers = await db.select({ id: users.id, email: users.email, name: users.name }).from(users);
+  const userById = new Map(allUsers.map((u) => [u.id, u]));
+  return c.json({
+    data: {
+      members: rows.map((r) => ({
+        userId: r.userId,
+        role: r.role,
+        email: userById.get(r.userId)?.email ?? "",
+        name: userById.get(r.userId)?.name ?? "",
+      })),
+    },
+  });
+});
+
+adminProjects.post("/projects/:id/members", requireSuperadmin, async (c) => {
+  const projectId = c.req.param("id");
+  const [project] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+  if (!project) return c.json({ error: { code: "NOT_FOUND", message: "Proyek tidak ditemukan" } }, 404);
+
+  const parsed = await readJson<{ userId?: string; role?: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  if (!parsed.body.userId || !isValidMemberRole(parsed.body.role)) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "userId dan role wajib diisi dengan benar" } }, 400);
+  }
+  const [targetUser] = await db.select().from(users).where(eq(users.id, parsed.body.userId)).limit(1);
+  if (!targetUser) return c.json({ error: { code: "NOT_FOUND", message: "User tidak ditemukan" } }, 404);
+
+  const [existingMembership] = await db
+    .select()
+    .from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, parsed.body.userId)))
+    .limit(1);
+  if (existingMembership) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Sudah menjadi anggota proyek ini" } }, 400);
+  }
+
+  await db.insert(projectMembers).values({ projectId, userId: parsed.body.userId, role: parsed.body.role });
+  return c.json(
+    { data: { member: { userId: targetUser.id, role: parsed.body.role, email: targetUser.email, name: targetUser.name } } },
+    201,
+  );
+});
+
+adminProjects.patch("/projects/:id/members/:userId", requireSuperadmin, async (c) => {
+  const { id: projectId, userId } = c.req.param();
+  const [membership] = await db
+    .select()
+    .from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
+    .limit(1);
+  if (!membership) return c.json({ error: { code: "NOT_FOUND", message: "Keanggotaan tidak ditemukan" } }, 404);
+
+  const parsed = await readJson<{ role?: string }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  if (!isValidMemberRole(parsed.body.role)) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Role tidak dikenal" } }, 400);
+  }
+  await db.update(projectMembers).set({ role: parsed.body.role }).where(eq(projectMembers.id, membership.id));
+  const [targetUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return c.json({ data: { member: { userId, role: parsed.body.role, email: targetUser?.email ?? "", name: targetUser?.name ?? "" } } });
+});
+
+adminProjects.delete("/projects/:id/members/:userId", requireSuperadmin, async (c) => {
+  const { id: projectId, userId } = c.req.param();
+  await db.delete(projectMembers).where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
+  return c.json({ data: { ok: true } });
 });
 
 export default adminProjects;
