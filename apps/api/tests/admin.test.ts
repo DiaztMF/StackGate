@@ -4,6 +4,7 @@ import { createApp } from "../src/app.js";
 import { db } from "../src/db/client.js";
 import { refreshTokens, users } from "../src/db/schema.js";
 import { hashPassword } from "../src/auth/password.js";
+import { cleanupTracked, trackProject } from "./cleanup.js";
 
 process.env.JWT_SECRET = "test-secret-32-chars-minimum-xxxx";
 
@@ -19,6 +20,7 @@ afterAll(async () => {
       await db.delete(users).where(eq(users.id, id));
     }),
   );
+  await cleanupTracked();
 });
 
 async function signIn(app: ReturnType<typeof createApp>, email: string, password = "password"): Promise<string> {
@@ -174,5 +176,38 @@ describe("admin user management", () => {
 
     // Restore the other superadmins so this test doesn't corrupt shared seed data.
     await Promise.all(others.map((u) => db.update(users).set({ role: "superadmin" }).where(eq(users.id, u.id))));
+  });
+});
+
+describe("admin project management", () => {
+  it("creates a project with default states and lists it", async () => {
+    const app = createApp();
+    const cookie = await createSuperadminAndSignIn(app);
+    const res = await app.request("/api/admin/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: `Admin Created ${Date.now()}` }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { project: { id: string; name: string; archivedAt: string | null } } };
+    expect(body.data.project.archivedAt).toBeNull();
+    trackProject(body.data.project.id);
+
+    const listRes = await app.request("/api/admin/projects", { headers: { Cookie: cookie } });
+    const list = (await listRes.json()) as { data: { projects: Array<{ id: string; memberCount: number }> } };
+    const found = list.data.projects.find((p) => p.id === body.data.project.id);
+    expect(found).toBeDefined();
+    expect(found?.memberCount).toBe(0);
+  });
+
+  it("rejects creating a project with an empty name", async () => {
+    const app = createApp();
+    const cookie = await createSuperadminAndSignIn(app);
+    const res = await app.request("/api/admin/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ name: "  " }),
+    });
+    expect(res.status).toBe(400);
   });
 });

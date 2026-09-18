@@ -22,6 +22,23 @@ function identifierFor(name: string): string {
   return name.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase() || "PRJ";
 }
 
+// Every new project starts with these 4 fixed states — used both by the
+// Plane-compat project-creation endpoint above and by the admin panel's
+// own project-creation endpoint (apps/api/src/admin/projects.ts).
+export async function createDefaultProjectStates(projectId: string): Promise<void> {
+  const defaultStates = [
+    { key: "backlog", name: "Backlog", position: "0" },
+    { key: "in-development", name: "In Development", position: "1" },
+    { key: "review", name: "Quality Gate Review", position: "2" },
+    { key: "ready", name: "Client Ready", position: "3" },
+  ];
+  await Promise.all(
+    defaultStates.map((s) =>
+      db.insert(states).values({ projectId, key: s.key, name: s.name, position: s.position })
+    )
+  );
+}
+
 async function resolveWorkspace(c: Context): Promise<WorkspaceRow | null> {
   if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) return null;
   const [ws] = await db.select().from(workspaces).limit(1);
@@ -175,24 +192,7 @@ planeWorkspaces.post("/:slug/projects", async (c) => {
     })
     .returning();
 
-  // Otomatis buat 4 state default untuk proyek baru
-  const defaultStates = [
-    { key: "backlog", name: "Backlog", position: "0" },
-    { key: "in-development", name: "In Development", position: "1" },
-    { key: "review", name: "Quality Gate Review", position: "2" },
-    { key: "ready", name: "Client Ready", position: "3" },
-  ];
-
-  await Promise.all(
-    defaultStates.map((s) =>
-      db.insert(states).values({
-        projectId: newProject.id,
-        key: s.key,
-        name: s.name,
-        position: s.position,
-      })
-    )
-  );
+  await createDefaultProjectStates(newProject.id);
 
   // Otomatis daftarkan pembuatnya sebagai member project (hanya lead/pm sampai sini)
   await db.insert(projectMembers).values({

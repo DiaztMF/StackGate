@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import adminProjects from "./admin/projects.js";
 import adminUsers from "./admin/users.js";
 import auth from "./auth/routes.js";
 import instanceApi from "./instance/routes.js";
@@ -38,6 +39,7 @@ export function createApp(): Hono {
   app.route("/api/instances", instanceApi);
   app.route("/api", ticketsApi);
   app.route("/api/admin", adminUsers);
+  app.route("/api/admin", adminProjects);
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: "Not found" } }, 404));
   app.onError((err, c) => {
