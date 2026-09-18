@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+export * from "./admin";
 export * from "./ai";
 export * from "./developer";
 export * from "./auth";
