@@ -320,23 +320,21 @@ Expected: FAIL — `/api/admin/users` doesn't exist yet (404, not 401/403/200).
 
 - [ ] **Step 3: Write the guard**
 
-Create `apps/api/src/admin/guard.ts`:
+Create `apps/api/src/admin/guard.ts`. No files under `apps/api/src` carry a
+license header (that convention is `apps/web`/`packages/*` only — this is
+original StackGate backend code, not derived from Plane) — match the rest
+of `apps/api/src`, which starts straight at the imports:
 
 ```ts
-/**
- * Copyright (c) 2023-present Plane Software, Inc. and contributors
- * SPDX-License-Identifier: AGPL-3.0-only
- * See the LICENSE file for details.
- */
-
 import { createMiddleware } from "hono/factory";
 import type { AuthUser } from "../auth/middleware.js";
 import { resolvePlaneUser, unauthorized } from "../plane/routes.js";
 
 // Admin routes are called from the browser with the same cookie session as
 // every other /api/workspaces/* endpoint, never a Bearer token — so this
-// guard resolves the user the same way (cookie first, Bearer fallback),
-// not via the Bearer-only authMiddleware used by the older /api/tickets/* API.
+// guard resolves the user the same way resolvePlaneUser does (Bearer header
+// first, falling back to the sg_refresh cookie), not via the Bearer-only
+// authMiddleware used by the older /api/tickets/* API.
 export const requireSuperadmin = createMiddleware<{ Variables: { user: AuthUser } }>(async (c, next) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
@@ -350,21 +348,19 @@ export const requireSuperadmin = createMiddleware<{ Variables: { user: AuthUser 
 
 - [ ] **Step 4: Write the users route (list only, for now)**
 
-Create `apps/api/src/admin/users.ts`:
+Create `apps/api/src/admin/users.ts` (no header — same reason as `guard.ts`
+above). Give the router the `AuthUser` variable generic up front, matching
+`tickets/routes.ts`'s convention, even though this first GET handler doesn't
+call `c.get("user")` yet — Task 4's POST/PATCH handlers do:
 
 ```ts
-/**
- * Copyright (c) 2023-present Plane Software, Inc. and contributors
- * SPDX-License-Identifier: AGPL-3.0-only
- * See the LICENSE file for details.
- */
-
 import { Hono } from "hono";
 import { db } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { requireSuperadmin } from "./guard.js";
+import type { AuthUser } from "../auth/middleware.js";
 
-const adminUsers = new Hono();
+const adminUsers = new Hono<{ Variables: { user: AuthUser } }>();
 
 adminUsers.get("/users", requireSuperadmin, async (c) => {
   const rows = await db
@@ -547,15 +543,10 @@ Expected: FAIL — `POST /users`, `PATCH /users/:id`, `POST /users/:id/reset-pas
 
 - [ ] **Step 3: Implement create, update, reset-password**
 
-Replace the whole content of `apps/api/src/admin/users.ts` with:
+Replace the whole content of `apps/api/src/admin/users.ts` with (no header
+— same reason as Task 3's `guard.ts`):
 
 ```ts
-/**
- * Copyright (c) 2023-present Plane Software, Inc. and contributors
- * SPDX-License-Identifier: AGPL-3.0-only
- * See the LICENSE file for details.
- */
-
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -835,15 +826,10 @@ Expected: FAIL — `/api/admin/projects` doesn't exist yet.
 
 - [ ] **Step 5: Implement the route**
 
-Create `apps/api/src/admin/projects.ts`:
+Create `apps/api/src/admin/projects.ts` (no header — same reason as Task 3's
+`guard.ts`):
 
 ```ts
-/**
- * Copyright (c) 2023-present Plane Software, Inc. and contributors
- * SPDX-License-Identifier: AGPL-3.0-only
- * See the LICENSE file for details.
- */
-
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
