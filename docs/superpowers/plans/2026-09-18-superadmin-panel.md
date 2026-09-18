@@ -429,8 +429,6 @@ git commit -m "feat(api): add requireSuperadmin guard and GET /api/admin/users"
 Append to `apps/api/tests/admin.test.ts` (inside a new `describe` block, after the existing one):
 
 ```ts
-const VALID_ROLES = ["student", "lead", "pm", "superadmin"];
-
 describe("admin user management", () => {
   it("creates a user with a valid role", async () => {
     const app = createApp();
