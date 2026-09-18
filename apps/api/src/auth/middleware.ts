@@ -4,7 +4,7 @@ import { verifyAccess } from "./tokens.js";
 export interface AuthUser {
   id: string;
   email: string;
-  role: "student" | "lead" | "pm";
+  role: "student" | "lead" | "pm" | "superadmin";
 }
 
 export const authMiddleware = createMiddleware<{ Variables: { user: AuthUser } }>(async (c, next) => {

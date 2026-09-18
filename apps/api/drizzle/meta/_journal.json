@@ -15,6 +15,13 @@
       "when": 1789656098623,
       "tag": "0001_empty_magdalene",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789702760352,
+      "tag": "0002_material_vin_gonzales",
+      "breakpoints": true
     }
   ]
 }

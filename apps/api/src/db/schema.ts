@@ -1,6 +1,6 @@
 import { boolean, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
-export const roleEnum = pgEnum("role", ["student", "lead", "pm"]);
+export const roleEnum = pgEnum("role", ["student", "lead", "pm", "superadmin"]);
 
 export const priorityEnum = pgEnum("priority", ["urgent", "high", "medium", "low", "none"]);
 
@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: roleEnum("role").notNull().default("student"),
   passwordHash: text("password_hash").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -31,6 +32,7 @@ export const projects = pgTable("projects", {
   workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

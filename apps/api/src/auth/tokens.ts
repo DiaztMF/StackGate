@@ -4,7 +4,7 @@ import { sign, verify } from "hono/jwt";
 export interface AccessPayload {
   sub: string;
   email: string;
-  role: "student" | "lead" | "pm";
+  role: "student" | "lead" | "pm" | "superadmin";
 }
 
 function secret(): string {
