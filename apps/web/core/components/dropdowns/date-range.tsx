@@ -8,10 +8,10 @@ import React, { useEffect, useRef, useState } from "react";
 import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
 import { ArrowNarrowRightOutline, CalendarOutline, CloseOutline, DueDateOutline } from "@makeplane/propel/icons";
 import { Combobox } from "@headlessui/react";
 // plane imports
+import { useAnchoredPosition } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 // ui
 import type { DateRange, Matcher } from "@plane/propel/calendar";
@@ -112,21 +112,9 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
   const startOfWeek = data?.start_of_the_week;
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  // popper-js refs
+  // trigger element — also the anchor the floating panel is positioned against
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
-  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
-  // popper-js init
-  const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    placement: placement ?? "bottom-start",
-    modifiers: [
-      {
-        name: "preventOverflow",
-        options: {
-          padding: 12,
-        },
-      },
-    ],
-  });
+  const panelStyle = useAnchoredPosition(referenceElement, isOpen, placement);
 
   const onOpen = () => {
     if (referenceElement) referenceElement.focus();
@@ -256,12 +244,7 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
 
   const comboOptions = (
     <Combobox.Options as="ul" data-prevent-outside-click static>
-      <div
-        className="z-30 my-1 overflow-hidden rounded-md border-[0.5px] border-subtle-1 bg-surface-1"
-        ref={setPopperElement}
-        style={styles.popper}
-        {...attributes.popper}
-      >
+      <div className="overflow-auto rounded-md border-[0.5px] border-subtle-1 bg-surface-1" style={panelStyle}>
         <Calendar
           className="rounded-md border border-subtle p-3 text-12"
           captionLayout="dropdown"

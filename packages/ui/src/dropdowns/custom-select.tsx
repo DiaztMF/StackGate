@@ -8,8 +8,7 @@ import { Combobox } from "@headlessui/react";
 
 import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
-import { useOutsideClickDetector } from "@plane/hooks";
+import { useAnchoredPosition, useOutsideClickDetector } from "@plane/hooks";
 import { ChevronDownOutline, TickOutline } from "@makeplane/propel/icons";
 // plane helpers
 // hooks
@@ -42,14 +41,11 @@ function CustomSelect(props: ICustomSelectProps) {
   } = props;
   // states
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
-  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    placement: placement ?? "bottom-start",
-  });
+  const panelStyle = useAnchoredPosition(referenceElement, isOpen, placement);
 
   const openDropdown = useCallback(() => {
     setIsOpen(true);
@@ -122,12 +118,10 @@ function CustomSelect(props: ICustomSelectProps) {
             <Combobox.Options as="ul" data-prevent-outside-click>
               <div
                 className={cn(
-                  "z-30 my-1 min-w-48 overflow-y-scroll rounded-md border-[0.5px] border-subtle-1 bg-surface-1 px-2 py-2.5 text-11 whitespace-nowrap focus:outline-none",
+                  "min-w-48 overflow-y-auto rounded-md border-[0.5px] border-subtle-1 bg-surface-1 px-2 py-2.5 text-11 whitespace-nowrap focus:outline-none",
                   optionsClassName
                 )}
-                ref={setPopperElement}
-                style={styles.popper}
-                {...attributes.popper}
+                style={panelStyle}
               >
                 <div
                   className={cn("space-y-1 overflow-y-scroll", {

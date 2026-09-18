@@ -8,8 +8,7 @@ import { Menu } from "@headlessui/react";
 import { ChevronDownOutline, ChevronRightOutline, MoreHorizontalOutline } from "@makeplane/propel/icons";
 import * as React from "react";
 import ReactDOM from "react-dom";
-import { usePopper } from "react-popper";
-import { useOutsideClickDetector } from "@plane/hooks";
+import { useAnchoredPosition, useOutsideClickDetector } from "@plane/hooks";
 // plane helpers
 // helpers
 import { useDropdownKeyDown } from "../hooks/use-dropdown-key-down";
@@ -86,15 +85,12 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
   } = props;
 
   const [referenceElement, setReferenceElement] = React.useState<HTMLButtonElement | null>(null);
-  const [popperElement, setPopperElement] = React.useState<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = React.useState(false);
   // refs
   const dropdownRef = React.useRef<HTMLDivElement | null>(null);
   const submenuClosersRef = React.useRef<Set<() => void>>(new Set());
 
-  const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    placement: placement ?? "auto",
-  });
+  const panelStyle = useAnchoredPosition(referenceElement, isOpen, placement ?? "bottom-start");
 
   const closeAllSubmenus = React.useCallback(() => {
     submenuClosersRef.current.forEach((closeSubmenu) => closeSubmenu());
@@ -213,9 +209,7 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
           },
           optionsClassName
         )}
-        ref={setPopperElement}
-        style={styles.popper}
-        {...attributes.popper}
+        style={panelStyle}
       >
         <MenuContext.Provider value={menuContextValue}>{children}</MenuContext.Provider>
       </div>
@@ -325,35 +319,11 @@ function SubMenu(props: ICustomSubMenuProps) {
 
   const [isOpen, setIsOpen] = React.useState(false);
   const [referenceElement, setReferenceElement] = React.useState<HTMLSpanElement | null>(null);
-  const [popperElement, setPopperElement] = React.useState<HTMLDivElement | null>(null);
   const submenuRef = React.useRef<HTMLDivElement | null>(null);
 
   const menuContext = React.useContext(MenuContext);
 
-  const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    placement,
-    strategy: "fixed", // Use fixed positioning to escape overflow constraints
-    modifiers: [
-      {
-        name: "offset",
-        options: {
-          offset: [0, 4],
-        },
-      },
-      {
-        name: "flip",
-        options: {
-          fallbackPlacements: ["left-start", "right-end", "left-end", "top-start", "bottom-start"],
-        },
-      },
-      {
-        name: "preventOverflow",
-        options: {
-          padding: 8,
-        },
-      },
-    ],
-  });
+  const panelStyle = useAnchoredPosition(referenceElement, isOpen, placement);
 
   const closeSubmenu = React.useCallback(() => {
     setIsOpen(false);
@@ -428,11 +398,9 @@ function SubMenu(props: ICustomSubMenuProps) {
       {isOpen && (
         <Portal>
           <div
-            ref={setPopperElement}
-            style={styles.popper}
-            {...attributes.popper}
+            style={panelStyle}
             className={cn(
-              "shadow-md fixed z-30 min-w-[12rem] overflow-hidden rounded-md border border-strong-1 bg-surface-1 p-1 text-11 ring-1 ring-strong-1/15",
+              "shadow-md min-w-[12rem] overflow-auto rounded-md border border-strong-1 bg-surface-1 p-1 text-11 ring-1 ring-strong-1/15",
               contentClassName
             )}
             data-prevent-outside-click="true"

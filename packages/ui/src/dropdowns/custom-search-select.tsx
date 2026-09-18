@@ -8,8 +8,7 @@ import { Combobox } from "@headlessui/react";
 import { ChevronDownOutline, InfoOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import React, { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
-import { useOutsideClickDetector } from "@plane/hooks";
+import { useAnchoredPosition, useOutsideClickDetector } from "@plane/hooks";
 // plane imports
 // local imports
 import { Tooltip } from "@plane/propel/tooltip";
@@ -45,14 +44,11 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
   const [query, setQuery] = useState("");
 
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
-  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    placement: placement ?? "bottom-start",
-  });
+  const panelStyle = useAnchoredPosition(referenceElement, isOpen, placement);
 
   const filteredOptions =
     query === "" ? options : options?.filter((option) => option.query.toLowerCase().includes(query.toLowerCase()));
@@ -145,12 +141,10 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                 <Combobox.Options as="ul" data-prevent-outside-click static>
                   <div
                     className={cn(
-                      "z-30 my-1 min-w-48 overflow-y-scroll rounded-md border-[0.5px] border-subtle-1 bg-surface-1 py-2.5 text-11 whitespace-nowrap focus:outline-none",
+                      "min-w-48 overflow-y-auto rounded-md border-[0.5px] border-subtle-1 bg-surface-1 py-2.5 text-11 whitespace-nowrap focus:outline-none",
                       optionsClassName
                     )}
-                    ref={setPopperElement}
-                    style={styles.popper}
-                    {...attributes.popper}
+                    style={panelStyle}
                   >
                     <div className="mx-2 flex items-center gap-1.5 rounded-sm border border-subtle px-2">
                       <SearchOutline className="h-3.5 w-3.5 text-placeholder" />

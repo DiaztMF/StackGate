@@ -9,10 +9,10 @@ import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
 import { Combobox } from "@headlessui/react";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
+import { useAnchoredPosition } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { DeactivatedUserOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import { EPillSize, EPillVariant, Pill } from "@plane/propel/pill";
@@ -52,7 +52,6 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   // states
   const [query, setQuery] = useState("");
-  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -61,18 +60,7 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
     workspace: { isUserSuspended },
   } = useMember();
   const { isMobile } = usePlatformOS();
-  // popper-js init
-  const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    placement: placement ?? "bottom-start",
-    modifiers: [
-      {
-        name: "preventOverflow",
-        options: {
-          padding: 12,
-        },
-      },
-    ],
-  });
+  const panelStyle = useAnchoredPosition(referenceElement, isOpen, placement);
 
   useEffect(() => {
     if (isOpen) {
@@ -134,14 +122,10 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
     <Combobox.Options as="ul" data-prevent-outside-click static>
       <div
         className={cn(
-          "z-30 my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none",
+          "w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none",
           optionsClassName
         )}
-        ref={setPopperElement}
-        style={{
-          ...styles.popper,
-        }}
-        {...attributes.popper}
+        style={panelStyle}
       >
         <div className="flex items-center gap-1.5 rounded-sm border border-subtle bg-surface-2 px-2">
           <SearchOutline className="h-3.5 w-3.5 text-placeholder" />

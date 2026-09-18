@@ -7,12 +7,12 @@
 import React, { useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
 import { CalendarOutline, CloseOutline } from "@makeplane/propel/icons";
 import { Combobox } from "@headlessui/react";
 // ui
 import type { Matcher } from "@plane/propel/calendar";
 import { Calendar } from "@plane/propel/calendar";
+import { useAnchoredPosition } from "@plane/hooks";
 import { ComboDropDown } from "@plane/ui";
 import { cn, renderFormattedDate, getDate } from "@plane/utils";
 // helpers
@@ -77,21 +77,9 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
   // hooks
   const { data } = useUserProfile();
   const startOfWeek = data?.start_of_the_week;
-  // popper-js refs
+  // trigger element — also the anchor the portalled panel is positioned against
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
-  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
-  // popper-js init
-  const { styles, attributes } = usePopper(referenceElement, popperElement, {
-    placement: placement ?? "bottom-start",
-    modifiers: [
-      {
-        name: "preventOverflow",
-        options: {
-          padding: 12,
-        },
-      },
-    ],
-  });
+  const panelStyle = useAnchoredPosition(referenceElement, isOpen, placement);
 
   const isDateSelected = value && value.toString().trim() !== "";
 
@@ -180,32 +168,31 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
     >
       {isOpen &&
         createPortal(
-          <Combobox.Options as="ul" data-prevent-outside-click static>
-            <div
-              className={cn(
-                "z-30 my-1 overflow-hidden rounded-md border-[0.5px] border-strong bg-surface-1 shadow-raised-200",
-                optionsClassName
-              )}
-              ref={setPopperElement}
-              style={styles.popper}
-              {...attributes.popper}
-            >
-              <Calendar
-                className="rounded-md border border-subtle p-3"
-                captionLayout="dropdown"
-                selected={getDate(value)}
-                defaultMonth={getDate(value)}
-                onSelect={(date: Date | undefined) => {
-                  dropdownOnChange(date ?? null);
-                }}
-                showOutsideDays
-                initialFocus
-                disabled={disabledDays}
-                mode="single"
-                fixedWeeks
-                weekStartsOn={startOfWeek}
-              />
-            </div>
+          <Combobox.Options
+            as="ul"
+            data-prevent-outside-click
+            static
+            style={panelStyle}
+            className={cn(
+              "overflow-auto rounded-md border-[0.5px] border-strong bg-surface-1 shadow-raised-200",
+              optionsClassName
+            )}
+          >
+            <Calendar
+              className="rounded-md border border-subtle p-3"
+              captionLayout="dropdown"
+              selected={getDate(value)}
+              defaultMonth={getDate(value)}
+              onSelect={(date: Date | undefined) => {
+                dropdownOnChange(date ?? null);
+              }}
+              showOutsideDays
+              initialFocus
+              disabled={disabledDays}
+              mode="single"
+              fixedWeeks
+              weekStartsOn={startOfWeek}
+            />
           </Combobox.Options>,
           document.body
         )}
