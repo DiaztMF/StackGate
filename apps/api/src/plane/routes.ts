@@ -37,7 +37,7 @@ function refreshCookieOptions(): {
 // then rejects. Project membership keeps them a full member — see roleNumber
 // in workspaces.ts.
 export function workspaceRoleNumber(role: UserRow["role"]): number {
-  if (role === "pm") return 20;
+  if (role === "pm" || role === "superadmin") return 20;
   return role === "lead" ? 15 : 5;
 }
 

@@ -13,7 +13,7 @@ type WorkspaceRow = typeof workspaces.$inferSelect;
 // descriptions and move them through the gate. Workspace-level role (guest
 // vs member vs admin) is workspaceRoleNumber, imported from routes.ts.
 function roleNumber(role: UserRow["role"]): number {
-  return role === "pm" ? 20 : 15;
+  return role === "pm" || role === "superadmin" ? 20 : 15;
 }
 
 function identifierFor(name: string): string {
@@ -124,7 +124,7 @@ function toPlaneProject(
     sort_order: null,
     logo_props: { in_use: "emoji", emoji: { value: "📁" } },
     member_role: memberRole,
-    archived_at: null,
+    archived_at: p.archivedAt ? p.archivedAt.toISOString() : null,
     workspace: wsId,
     // Cycles, views, pages and intake are Plane features this API does not
     // implement. Flagging them off removes their sidebar entries and menus
