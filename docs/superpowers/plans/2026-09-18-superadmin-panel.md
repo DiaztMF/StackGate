@@ -766,17 +766,53 @@ Expected: all existing tests (especially `plane-workspaces.test.ts` project-crea
 
 - [ ] **Step 3: Write the failing tests for the new endpoints**
 
-First, add `trackProject` to the existing `import { afterAll, describe, expect, it } from "vitest";` block's neighboring import at the top of `apps/api/tests/admin.test.ts` — change:
+First, wire `trackProject` cleanup into `apps/api/tests/admin.test.ts` — it
+must both be imported AND actually run in `afterAll`, or every project this
+file's tests create leaks into the shared Neon database on every test run
+(the same database local dev and production use). Change:
 
 ```ts
 import { hashPassword } from "../src/auth/password.js";
+
+process.env.JWT_SECRET = "test-secret-32-chars-minimum-xxxx";
+
+const createdUserIds: string[] = [];
+
+afterAll(async () => {
+  // signIn() issues a refresh token row for each created user; delete it
+  // first (same order as tests/plane-auth.test.ts) to satisfy the
+  // refresh_tokens -> users FK before deleting the user.
+  await Promise.all(
+    createdUserIds.map(async (id) => {
+      await db.delete(refreshTokens).where(eq(refreshTokens.userId, id));
+      await db.delete(users).where(eq(users.id, id));
+    }),
+  );
+});
 ```
 
 to:
 
 ```ts
 import { hashPassword } from "../src/auth/password.js";
-import { trackProject } from "./cleanup.js";
+import { cleanupTracked, trackProject } from "./cleanup.js";
+
+process.env.JWT_SECRET = "test-secret-32-chars-minimum-xxxx";
+
+const createdUserIds: string[] = [];
+
+afterAll(async () => {
+  // signIn() issues a refresh token row for each created user; delete it
+  // first (same order as tests/plane-auth.test.ts) to satisfy the
+  // refresh_tokens -> users FK before deleting the user.
+  await Promise.all(
+    createdUserIds.map(async (id) => {
+      await db.delete(refreshTokens).where(eq(refreshTokens.userId, id));
+      await db.delete(users).where(eq(users.id, id));
+    }),
+  );
+  await cleanupTracked();
+});
 ```
 
 Then append the new test block to the end of the file:
