@@ -156,7 +156,9 @@ describe("guard matrix", () => {
   }, 30000);
 
   it("lead →ready with unchecked gate items → 422 GATE_INCOMPLETE", async () => {
-    const f = await setupFixture();
+    const f = await setupFixture({ description: "Valid review state" });
+    await transition(f.studentToken, f.ticketId, { to_state: "in-development" });
+    await transition(f.studentToken, f.ticketId, { to_state: "review" });
     await db.insert(gateCheckItems).values({ ticketId: f.ticketId, label: "Check 1" });
     const res = await transition(f.leadToken, f.ticketId, { to_state: "ready" });
     expect(res.status).toBe(422);

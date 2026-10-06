@@ -69,12 +69,18 @@ ticketsApi.post("/tickets/:id/transition", authMiddleware, async (c) => {
 });
 
 ticketsApi.get("/tickets/:id/research-links", authMiddleware, async (c) => {
-  const rows = await db.select().from(researchLinks).where(eq(researchLinks.ticketId, c.req.param("id")));
+  const ticketId = c.req.param("id");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  const rows = await db.select().from(researchLinks).where(eq(researchLinks.ticketId, ticketId));
   return c.json({ data: { links: rows } });
 });
 
 ticketsApi.post("/tickets/:id/research-links", authMiddleware, async (c) => {
   const user = c.get("user");
+  const ticketId = c.req.param("id");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
   const parsed = await readJson<{ url: string; label: string; required?: boolean }>(c);
   if (!parsed.ok) return invalidJson(c);
   const body = parsed.body;
@@ -83,13 +89,16 @@ ticketsApi.post("/tickets/:id/research-links", authMiddleware, async (c) => {
   }
   const [row] = await db
     .insert(researchLinks)
-    .values({ ticketId: c.req.param("id"), url: body.url, label: body.label, required: body.required ?? false, createdById: user.id })
+    .values({ ticketId, url: body.url, label: body.label, required: body.required ?? false, createdById: user.id })
     .returning();
   return c.json({ data: { link: row } }, 201);
 });
 
 ticketsApi.get("/tickets/:id/gate-checks", authMiddleware, async (c) => {
-  const rows = await db.select().from(gateCheckItems).where(eq(gateCheckItems.ticketId, c.req.param("id")));
+  const ticketId = c.req.param("id");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  const rows = await db.select().from(gateCheckItems).where(eq(gateCheckItems.ticketId, ticketId));
   return c.json({ data: { items: rows } });
 });
 
@@ -98,30 +107,39 @@ ticketsApi.post("/tickets/:id/gate-checks", authMiddleware, async (c) => {
   if (user.role === "student") {
     return c.json({ error: { code: "FORBIDDEN_TRANSITION", message: "Hanya lead yang mengelola checklist" } }, 403);
   }
+  const ticketId = c.req.param("id");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
   const parsed = await readJson<{ label: string }>(c);
   if (!parsed.ok) return invalidJson(c);
   const body = parsed.body;
   if (!body.label || body.label.trim().length === 0) {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "Label wajib diisi" } }, 400);
   }
-  const [row] = await db.insert(gateCheckItems).values({ ticketId: c.req.param("id"), label: body.label }).returning();
+  const [row] = await db.insert(gateCheckItems).values({ ticketId, label: body.label }).returning();
   return c.json({ data: { item: row } }, 201);
 });
 
 ticketsApi.get("/tickets/:id/comments", authMiddleware, async (c) => {
-  const rows = await db.select().from(comments).where(eq(comments.ticketId, c.req.param("id")));
+  const ticketId = c.req.param("id");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  const rows = await db.select().from(comments).where(eq(comments.ticketId, ticketId));
   return c.json({ data: { comments: rows } });
 });
 
 ticketsApi.post("/tickets/:id/comments", authMiddleware, async (c) => {
   const user = c.get("user");
+  const ticketId = c.req.param("id");
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
   const parsed = await readJson<{ body: string }>(c);
   if (!parsed.ok) return invalidJson(c);
   const body = parsed.body;
   if (!body.body || body.body.trim().length === 0) {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "Komentar tidak boleh kosong" } }, 400);
   }
-  const [row] = await db.insert(comments).values({ ticketId: c.req.param("id"), authorId: user.id, body: body.body.trim() }).returning();
+  const [row] = await db.insert(comments).values({ ticketId, authorId: user.id, body: body.body.trim() }).returning();
   return c.json({ data: { comment: row } }, 201);
 });
 

@@ -21,6 +21,9 @@ export async function checkTransition(
   const fromKey = fromState?.key;
 
   if (toKey === "ready") {
+    if (fromKey !== "review") {
+      return { ok: false, status: 403, code: "FORBIDDEN_TRANSITION", message: "Tiket hanya bisa diselesaikan dari tahap review" };
+    }
     if (actor.role !== "lead") {
       return { ok: false, status: 403, code: "FORBIDDEN_TRANSITION", message: "Hanya lead yang boleh menutup tiket" };
     }

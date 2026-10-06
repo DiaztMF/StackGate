@@ -37,7 +37,20 @@ function toDateOnly(value: string | null): string | null {
   return value ? value.slice(0, 10) : null;
 }
 
-export function toBaseIssue(t: typeof tickets.$inferSelect, seq: number) {
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+export function toBaseIssue(
+  t: typeof tickets.$inferSelect,
+  seq: number,
+  gateStats?: { total: number; completed: number }
+) {
   return {
     id: t.id,
     sequence_id: seq,
@@ -51,6 +64,8 @@ export function toBaseIssue(t: typeof tickets.$inferSelect, seq: number) {
     sub_issues_count: 0,
     attachment_count: 0,
     link_count: 0,
+    gate_checks_count: gateStats?.total ?? 0,
+    gate_checks_completed: gateStats?.completed ?? 0,
     project_id: t.projectId,
     parent_id: null,
     cycle_id: null,
@@ -65,7 +80,7 @@ export function toBaseIssue(t: typeof tickets.$inferSelect, seq: number) {
     created_by: t.reporterId ?? "",
     updated_by: t.reporterId ?? "",
     is_draft: false,
-    description_html: "<p>" + (t.description || "") + "</p>",
+    description_html: "<p>" + escapeHtml(t.description || "") + "</p>",
   };
 }
 
@@ -105,8 +120,20 @@ planeIssues.get("/:slug/projects/:projectId/issues", async (c) => {
   if (!project) {
     return c.json({ error: { code: "NOT_FOUND", message: "Project tidak ditemukan" } }, 404);
   }
-  const ticketRows = await db.select().from(tickets).where(eq(tickets.projectId, projectId));
-  const results = ticketRows.map((t, idx) => toBaseIssue(t, idx + 1));
+  const [ticketRows, gateRows] = await Promise.all([
+    db.select().from(tickets).where(eq(tickets.projectId, projectId)),
+    db.select().from(gateCheckItems),
+  ]);
+
+  const gateStatsMap = new Map<string, { total: number; completed: number }>();
+  for (const g of gateRows) {
+    const curr = gateStatsMap.get(g.ticketId) ?? { total: 0, completed: 0 };
+    curr.total += 1;
+    if (g.checkedAt) curr.completed += 1;
+    gateStatsMap.set(g.ticketId, curr);
+  }
+
+  const results = ticketRows.map((t, idx) => toBaseIssue(t, idx + 1, gateStatsMap.get(t.id)));
   return c.json({
     results,
     total_results: results.length,
@@ -125,10 +152,61 @@ planeIssues.get("/:slug/projects/:projectId/issues", async (c) => {
 planeIssues.get("/:slug/projects/:projectId/issues/:issueId/meta", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
+  const projectId = c.req.param("projectId");
+  const issueId = c.req.param("issueId");
+  const [project] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+  if (!project) return c.json({ error: { code: "NOT_FOUND", message: "Project tidak ditemukan" } }, 404);
+  const projectTickets = await db.select().from(tickets).where(eq(tickets.projectId, projectId));
+  const seqIdx = projectTickets.findIndex((t) => t.id === issueId);
+  const sequenceId = seqIdx !== -1 ? seqIdx + 1 : 1;
+  const words = project.name.split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const identifier =
+    words.length > 1
+      ? words.map((w) => w[0]).join("").slice(0, 4).toUpperCase()
+      : project.name.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase() || "PRJ";
+
   return c.json({
-    project_id: c.req.param("projectId"),
+    project_id: projectId,
     workspace_id: DEMO_WORKSPACE_SLUG,
+    project_identifier: identifier,
+    sequence_id: sequenceId,
   });
+});
+
+planeIssues.get("/:slug/work-items/:itemIdentifier", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+  const itemIdentifier = c.req.param("itemIdentifier");
+  const lastDash = itemIdentifier.lastIndexOf("-");
+  if (lastDash === -1) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Item tidak ditemukan" } }, 404);
+  }
+  const projectIdentifier = itemIdentifier.slice(0, lastDash);
+  const sequenceId = parseInt(itemIdentifier.slice(lastDash + 1), 10);
+
+  const allProjects = await db.select().from(projects);
+  const targetProject = allProjects.find((p) => {
+    const words = p.name.split(/[^A-Za-z0-9]+/).filter(Boolean);
+    const idf =
+      words.length > 1
+        ? words.map((w) => w[0]).join("").slice(0, 4).toUpperCase()
+        : p.name.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase() || "PRJ";
+    return idf === projectIdentifier;
+  });
+
+  if (!targetProject) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Project tidak ditemukan" } }, 404);
+  }
+
+  const projectTickets = await db.select().from(tickets).where(eq(tickets.projectId, targetProject.id));
+  const ticket = projectTickets[sequenceId - 1];
+  if (!ticket) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
+  }
+  return c.json(toBaseIssue(ticket, sequenceId));
 });
 
 planeIssues.get("/:slug/projects/:projectId/issues/:issueId", async (c) => {
@@ -222,6 +300,7 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
 
   const parsed = await readJson<{
     state_id?: string;
+    note?: string;
     name?: string;
     description_html?: string;
     assignee_ids?: string[];
@@ -238,7 +317,13 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
     updates.description = parsed.body.description_html.replace(/<[^>]*>/g, "").trim();
   }
   if (parsed.body.assignee_ids !== undefined) {
-    updates.assigneeId = parsed.body.assignee_ids[0] ?? null;
+    const nextAssignee = parsed.body.assignee_ids[0] ?? null;
+    if (nextAssignee !== ticket.assigneeId) {
+      if (user.role === "student") {
+        return c.json({ error: { code: "FORBIDDEN_TRANSITION", message: "Hanya Lead atau PM yang boleh mengubah penugasan tiket" } }, 403);
+      }
+      updates.assigneeId = nextAssignee;
+    }
   }
   if (typeof parsed.body.research_required === "boolean") {
     updates.researchRequired = parsed.body.research_required;
@@ -258,26 +343,20 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
     if (!targetState) {
       return c.json({ error: { code: "NOT_FOUND", message: "State tidak ditemukan" } }, 404);
     }
-    // If ticket was just updated in the same request (e.g. researchRequired or assigneeId),
-    // persist updates first before checking transitions, or update ticket record.
-    if (Object.keys(updates).length > 0) {
-      await db.update(tickets).set(updates).where(eq(tickets.id, issueId));
-    }
-    const guardResult = await checkTransition(ticket.id, targetState.key, {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    const guardResult = await checkTransition(
+      ticket.id,
+      targetState.key,
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      parsed.body.note,
+    );
     if (!guardResult.ok) {
       return c.json({ error: { code: guardResult.code, message: guardResult.message } }, guardResult.status);
     }
     updates.stateId = targetState.id;
-    await db.insert(ticketTransitions).values({
-      ticketId: ticket.id,
-      fromStateId: ticket.stateId,
-      toStateId: targetState.id,
-      actorId: user.id,
-    });
   }
 
   // A PATCH carrying only fields this API does not model would leave `updates`
@@ -285,7 +364,19 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
   if (Object.keys(updates).length === 0) {
     return c.json(toBaseIssue(ticket, 1));
   }
-  const [updated] = await db.update(tickets).set(updates).where(eq(tickets.id, issueId)).returning();
+
+  const [updated] = await db.transaction(async (tx) => {
+    const [row] = await tx.update(tickets).set(updates).where(eq(tickets.id, issueId)).returning();
+    if (parsed.body.state_id && parsed.body.state_id !== ticket.stateId) {
+      await tx.insert(ticketTransitions).values({
+        ticketId: ticket.id,
+        fromStateId: ticket.stateId,
+        toStateId: parsed.body.state_id,
+        actorId: user.id,
+      });
+    }
+    return [row];
+  });
   return c.json(toBaseIssue(updated, 1));
 });
 
@@ -455,8 +546,9 @@ planeIssues.get("/:slug/projects/:projectId/issues/:issueId/history", async (c) 
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
   const activityType = c.req.query("activity_type") ?? "";
+  const issueId = c.req.param("issueId");
+
   if (activityType === "issue-comment" || activityType === "epic-comment") {
-    const issueId = c.req.param("issueId");
     const rows = await db
       .select({ comment: comments, author: users })
       .from(comments)
@@ -472,7 +564,67 @@ planeIssues.get("/:slug/projects/:projectId/issues/:issueId/history", async (c) 
       ),
     );
   }
-  return c.json([]);
+
+  const [commentRows, transitionRows] = await Promise.all([
+    db
+      .select({ comment: comments, author: users })
+      .from(comments)
+      .leftJoin(users, eq(comments.authorId, users.id))
+      .where(eq(comments.ticketId, issueId)),
+    db
+      .select({ transition: ticketTransitions, actor: users })
+      .from(ticketTransitions)
+      .leftJoin(users, eq(ticketTransitions.actorId, users.id))
+      .where(eq(ticketTransitions.ticketId, issueId)),
+  ]);
+
+  const pStates = await db.select().from(states);
+  const stateMap = new Map(pStates.map((s) => [s.id, s.name]));
+
+  const commentActivities = commentRows.map((r) =>
+    toPlaneComment(r.comment, r.author ?? user, {
+      slug: c.req.param("slug"),
+      projectId: c.req.param("projectId"),
+      issueId,
+    }),
+  );
+
+  const transitionActivities = transitionRows.map((r) => {
+    const at = r.transition.createdAt.toISOString();
+    const fromName = r.transition.fromStateId ? stateMap.get(r.transition.fromStateId) ?? "Backlog" : "Initial";
+    const toName = stateMap.get(r.transition.toStateId) ?? "State";
+    const actor = r.actor ?? user;
+
+    return {
+      id: r.transition.id,
+      verb: "updated",
+      field: "state",
+      old_value: r.transition.fromStateId,
+      new_value: r.transition.toStateId,
+      old_identifier: fromName,
+      new_identifier: toName,
+      created_at: at,
+      updated_at: at,
+      actor: actor.id,
+      actor_detail: {
+        id: actor.id,
+        first_name: actor.name,
+        last_name: "",
+        avatar_url: "",
+        is_bot: false,
+        display_name: actor.name,
+      },
+      issue: issueId,
+      project: c.req.param("projectId"),
+      workspace: c.req.param("slug"),
+    };
+  });
+
+  const combined = [...commentActivities, ...transitionActivities].toSorted(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
+  return c.json(combined);
 });
 
 function toPlaneComment(
@@ -727,6 +879,10 @@ planeIssues.delete("/:slug/projects/:projectId/issues/:issueId/research-links/:l
   const [link] = await db.select().from(researchLinks).where(eq(researchLinks.id, linkId)).limit(1);
   if (!link || link.ticketId !== issueId) {
     return c.json({ error: { code: "NOT_FOUND", message: "Tautan riset tidak ditemukan" } }, 404);
+  }
+
+  if (user.role === "student" && link.createdById !== user.id) {
+    return c.json({ error: { code: "FORBIDDEN_TRANSITION", message: "Hanya pembuat tautan atau Lead/PM yang dapat menghapus tautan riset" } }, 403);
   }
 
   await db.delete(researchLinks).where(eq(researchLinks.id, linkId));
