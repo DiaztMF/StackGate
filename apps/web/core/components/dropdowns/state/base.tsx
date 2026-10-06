@@ -144,7 +144,23 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
       : stateTransitionBlockedReason(currentUser?.role, currentStateKey, getStateKey(getStateById(targetStateId)));
 
   const dropdownOnChange = (val: string) => {
-    onChange(val);
+    const targetState = getStateById(val);
+    const targetKey = getStateKey(targetState);
+
+    const isRejectTransition = currentStateKey === "review" && targetKey === "in-development";
+    const isBacklogTransition = targetKey === "backlog" && currentStateKey !== "backlog";
+
+    if (isRejectTransition || isBacklogTransition) {
+      const promptLabel = isRejectTransition ? "Masukkan catatan revisi untuk siswa:" : "Masukkan alasan pengembalian ke Backlog:";
+      const note = window.prompt(promptLabel);
+      if (!note || note.trim().length === 0) {
+        alert("Catatan wajib diisi untuk melakukan transisi ini.");
+        return;
+      }
+      (onChange as any)(val, { note: note.trim() });
+    } else {
+      onChange(val);
+    }
     handleClose();
   };
 

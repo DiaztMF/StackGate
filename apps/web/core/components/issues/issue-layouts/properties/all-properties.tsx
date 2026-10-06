@@ -401,6 +401,27 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
         </WithDisplayPropertiesHOC>
       )}
 
+      {issue.gate_checks_count !== undefined && issue.gate_checks_count > 0 && (
+        <Tooltip
+          label={`Mutu: ${issue.gate_checks_completed || 0}/${issue.gate_checks_count} Kriteria`}
+          disabled={isMobile}
+        >
+          <span
+            className={cn(
+              "flex h-5 flex-shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-sm border-[0.5px] px-2 py-0.5 select-none",
+              issue.gate_checks_completed === issue.gate_checks_count
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium"
+                : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            )}
+          >
+            <span className="text-[10px] font-semibold tracking-wide">GATE</span>
+            <span className="text-[11px] font-medium">
+              {issue.gate_checks_completed || 0}/{issue.gate_checks_count}
+            </span>
+          </span>
+        </Tooltip>
+      )}
+
       {/* extra render properties */}
       {/* sub-issues */}
       {!isEpic && (

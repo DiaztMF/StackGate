@@ -14,7 +14,7 @@ import type { IState } from "@plane/types";
  * carry (assignee, description, research links) are still enforced server-side.
  */
 
-export type TStackGateRole = "student" | "lead" | "pm";
+export type TStackGateRole = "student" | "lead" | "pm" | "superadmin";
 
 /** StackGate ships four fixed states; the API exposes their keys on IState. */
 export function getStateKey(state: IState | undefined): string | undefined {
@@ -30,6 +30,9 @@ export function stateTransitionBlockedReason(
   if (!role || !fromKey || !toKey || fromKey === toKey) return null;
 
   if (toKey === "ready") {
+    if (fromKey !== "review") {
+      return "Tiket hanya bisa diselesaikan dari tahap review";
+    }
     return role === "lead" ? null : "Hanya lead yang boleh menutup tiket";
   }
   if (toKey === "backlog" && fromKey !== "backlog") {
