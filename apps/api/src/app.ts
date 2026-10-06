@@ -7,6 +7,7 @@ import instanceApi from "./instance/routes.js";
 import { planeAuth, planeUsers } from "./plane/routes.js";
 import { planeIssues } from "./plane/issues.js";
 import { planeUserWorkspaces, planeWorkspaces } from "./plane/workspaces.js";
+import { miscApi, workspaceExtras } from "./plane/extras.js";
 import ticketsApi from "./tickets/routes.js";
 
 export function createApp(): Hono {
@@ -36,6 +37,8 @@ export function createApp(): Hono {
   app.route("/api/users/me/workspaces", planeUserWorkspaces);
   app.route("/api/workspaces", planeWorkspaces);
   app.route("/api/workspaces", planeIssues);
+  app.route("/api/workspaces", workspaceExtras);
+  app.route("/api", miscApi);
   app.route("/api/instances", instanceApi);
   app.route("/api", ticketsApi);
   app.route("/api/admin", adminUsers);
