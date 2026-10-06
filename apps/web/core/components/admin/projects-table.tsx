@@ -55,7 +55,11 @@ export function ProjectsTable() {
               <td className="py-2">{project.memberCount}</td>
               <td className="py-2">{renderFormattedDate(project.createdAt)}</td>
               <td className="py-2">
-                <Button variant={project.archivedAt ? "error-fill" : "ghost"} size="sm" onClick={() => handleToggleArchive(project)}>
+                <Button
+                  variant={project.archivedAt ? "error-fill" : "ghost"}
+                  size="sm"
+                  onClick={() => handleToggleArchive(project)}
+                >
                   {project.archivedAt ? "Diarsipkan" : "Aktif"}
                 </Button>
               </td>

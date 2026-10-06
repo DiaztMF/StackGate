@@ -59,7 +59,13 @@ export function ResetPasswordModal(props: Props) {
           <Button variant="ghost" size="sm" onClick={handleClose}>
             Batal
           </Button>
-          <Button variant="primary" size="sm" loading={submitting} disabled={password.length < 8} onClick={handleSubmit}>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={submitting}
+            disabled={password.length < 8}
+            onClick={handleSubmit}
+          >
             Reset
           </Button>
         </div>

@@ -77,7 +77,11 @@ export function UsersTable() {
                 </select>
               </td>
               <td className="py-2">
-                <Button variant={user.isActive ? "ghost" : "error-fill"} size="sm" onClick={() => handleToggleActive(user)}>
+                <Button
+                  variant={user.isActive ? "ghost" : "error-fill"}
+                  size="sm"
+                  onClick={() => handleToggleActive(user)}
+                >
                   {user.isActive ? "Aktif" : "Nonaktif"}
                 </Button>
               </td>
