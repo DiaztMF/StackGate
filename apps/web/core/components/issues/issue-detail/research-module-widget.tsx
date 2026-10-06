@@ -51,8 +51,7 @@ export const ResearchModuleWidget = observer(function ResearchModuleWidget({
     { revalidateOnFocus: false }
   );
 
-  const isLeadOrPm = currentUser?.role === "lead" || currentUser?.role === "pm";
-  const isStudent = currentUser?.role === "student";
+  const isLeadOrPm = currentUser?.role === "lead" || currentUser?.role === "pm" || currentUser?.role === "superadmin";
   const researchRequired = !!data?.research_required;
   const links = data?.links || [];
 

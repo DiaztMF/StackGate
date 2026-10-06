@@ -52,7 +52,7 @@ export const QualityGateWidget = observer(function QualityGateWidget({
   const percent = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
   const isComplete = total > 0 && checkedCount === total;
   const isLead = currentUser?.role === "lead";
-  const isStudent = currentUser?.role === "student";
+  const canAddCriteria = currentUser?.role === "lead" || currentUser?.role === "pm" || currentUser?.role === "superadmin";
 
   const handleToggleCheck = async (item: GateCheckItem) => {
     if (!isLead) return;
@@ -193,11 +193,11 @@ export const QualityGateWidget = observer(function QualityGateWidget({
         </div>
       )}
 
-      {isStudent && (
+      {!isLead && (
         <p className="text-11 text-tertiary italic">Hanya Lead developer yang dapat memvalidasi kriteria mutu ini.</p>
       )}
 
-      {isLead && (
+      {canAddCriteria && (
         <form onSubmit={handleAddCriteria} className="flex items-center gap-2 pt-1">
           <input
             type="text"

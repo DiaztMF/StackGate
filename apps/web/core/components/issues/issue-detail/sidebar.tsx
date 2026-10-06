@@ -86,7 +86,9 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
             <SidebarPropertyListItem icon={StateOutline} label={t("common.state")}>
               <StateDropdown
                 value={issue?.state_id}
-                onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { state_id: val })}
+                onChange={(val, meta?: { note?: string }) =>
+                  issueOperations.update(workspaceSlug, projectId, issueId, { state_id: val, ...(meta?.note ? { note: meta.note } : {}) } as any)
+                }
                 projectId={projectId?.toString() ?? ""}
                 disabled={!isEditable}
                 buttonVariant="transparent-with-text"
