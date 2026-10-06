@@ -153,9 +153,9 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     issue,
     activeLayout = "",
     isEditingAllowed,
-    isArchivingAllowed = false,
-    isDeletingAllowed,
-    isRestoringAllowed = false,
+    isArchivingAllowed: _isArchivingAllowed = false,
+    isDeletingAllowed: _isDeletingAllowed,
+    isRestoringAllowed: _isRestoringAllowed = false,
     isInArchivableGroup = false,
     issueTypeDetail,
     setIssueToEdit,
@@ -238,7 +238,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     iconClassName: "mt-1",
     action: () => handleOptionalAction(setArchiveIssueModal, "Archive", true),
     disabled: !isInArchivableGroup,
-    shouldRender: isArchivingAllowed,
+    shouldRender: false, // StackGate does not implement issue archiving
   });
 
   const createRestoreMenuItem = (): TContextMenuItem => ({
@@ -246,7 +246,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     title: "Restore",
     icon: RestoreOutline,
     action: actionHandlers.handleIssueRestore,
-    shouldRender: isRestoringAllowed,
+    shouldRender: false, // StackGate does not implement issue archiving
   });
 
   const createDeleteMenuItem = (): TContextMenuItem => ({
@@ -256,7 +256,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     action: () => {
       setDeleteIssueModal(true);
     },
-    shouldRender: isDeletingAllowed,
+    shouldRender: false, // StackGate does not support deleting tickets directly
   });
 
   return {
