@@ -3,7 +3,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projectMembers, projects, refreshTokens, users, workspaceMembers, workspaces } from "../db/schema.js";
+import { refreshTokens, users, workspaceMembers, workspaces } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { hashRefreshToken, newRefreshToken, verifyAccess } from "../auth/tokens.js";
 import { invalidJson, readJson } from "../http.js";
@@ -53,7 +53,7 @@ export function toPlaneUser(u: UserRow) {
     is_bot: false,
     cover_image_url: null,
     date_joined: u.createdAt.toISOString(),
-    is_active: true,
+    is_active: u.isActive,
     is_email_verified: true,
     is_password_autoset: false,
     is_tour_completed: true,
@@ -94,7 +94,7 @@ export async function resolvePlaneUser(c: Context): Promise<UserRow | null> {
     try {
       const payload = await verifyAccess(token);
       const [row] = await db.select().from(users).where(eq(users.id, payload.sub)).limit(1);
-      if (row) return row;
+      if (row && row.isActive) return row;
     } catch {
       // fall through to cookie
     }
@@ -114,7 +114,8 @@ export async function resolvePlaneUser(c: Context): Promise<UserRow | null> {
     .limit(1);
   if (!link) return null;
   const [row] = await db.select().from(users).where(eq(users.id, link.userId)).limit(1);
-  return row ?? null;
+  if (!row || !row.isActive) return null;
+  return row;
 }
 
 export function unauthorized(c: Context) {
@@ -225,14 +226,6 @@ planeAuth.post("/sign-up", async (c) => {
       role: "student",
     });
   }
-  const [prj] = await db.select().from(projects).limit(1);
-  if (prj) {
-    await db.insert(projectMembers).values({
-      projectId: prj.id,
-      userId: user.id,
-      role: "student",
-    });
-  }
 
   await issueSession(c, user);
   if (wantsJson) return c.json(toPlaneUser(user));
@@ -249,6 +242,9 @@ planeAuth.post("/sign-in", async (c) => {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return c.json({ error: { code: "UNAUTHORIZED", message: "Email atau password salah" } }, 401);
+  }
+  if (!user.isActive) {
+    return c.json({ error: { code: "UNAUTHORIZED", message: "Akun dinonaktifkan, hubungi admin" } }, 403);
   }
   await issueSession(c, user);
   if (wantsJson) return c.json(toPlaneUser(user));
@@ -338,7 +334,7 @@ planeUsers.get("/me/accounts", async (c) => {
 planeUsers.get("/me/instance-admin", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
-  return c.json({ is_instance_admin: user.role === "pm" });
+  return c.json({ is_instance_admin: user.role === "superadmin" });
 });
 
 planeUsers.patch("/me/onboard", async (c) => {

@@ -11,11 +11,11 @@ import { invalidJson, readJson } from "../http.js";
 const REFRESH_DAYS = 7;
 const auth = new Hono<{ Variables: { user: AuthUser } }>();
 
-function refreshCookieOptions(): { httpOnly: true; path: "/api/auth"; maxAge: number; sameSite: "None" | "Lax"; secure: boolean } {
+function refreshCookieOptions(): { httpOnly: true; path: "/"; maxAge: number; sameSite: "None" | "Lax"; secure: boolean } {
   const crossSite = process.env.COOKIE_CROSS_SITE === "1";
   return {
     httpOnly: true,
-    path: "/api/auth",
+    path: "/",
     maxAge: REFRESH_DAYS * 86400,
     sameSite: crossSite ? "None" : "Lax",
     secure: crossSite,
@@ -36,6 +36,9 @@ auth.post("/login", async (c) => {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return c.json({ error: { code: "UNAUTHORIZED", message: "Email atau password salah" } }, 401);
+  }
+  if (!user.isActive) {
+    return c.json({ error: { code: "UNAUTHORIZED", message: "Akun dinonaktifkan, hubungi admin" } }, 403);
   }
   const accessToken = await signAccess({ sub: user.id, email: user.email, role: user.role });
   const { token, tokenHash } = newRefreshToken();
@@ -67,6 +70,9 @@ auth.post("/refresh", async (c) => {
   }
   const [user] = await db.select().from(users).where(eq(users.id, revoked.userId)).limit(1);
   if (!user) return c.json({ error: { code: "UNAUTHORIZED", message: "Refresh token tidak valid" } }, 401);
+  if (!user.isActive) {
+    return c.json({ error: { code: "UNAUTHORIZED", message: "Akun dinonaktifkan, hubungi admin" } }, 403);
+  }
   const accessToken = await signAccess({ sub: user.id, email: user.email, role: user.role });
   const next = newRefreshToken();
   await db.insert(refreshTokens).values({
@@ -83,7 +89,7 @@ auth.post("/logout", async (c) => {
   if (presented) {
     await db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.tokenHash, hashRefreshToken(presented)));
   }
-  deleteCookie(c, "sg_refresh", { path: "/api/auth", sameSite: refreshCookieOptions().sameSite, secure: refreshCookieOptions().secure });
+  deleteCookie(c, "sg_refresh", { path: "/", sameSite: refreshCookieOptions().sameSite, secure: refreshCookieOptions().secure });
   return c.json({ data: { ok: true } });
 });
 
