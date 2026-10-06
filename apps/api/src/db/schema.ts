@@ -107,3 +107,16 @@ export const refreshTokens = pgTable("refresh_tokens", {
   expiresAt: timestamp("expires_at").notNull(),
   revokedAt: timestamp("revoked_at"),
 });
+
+
+export const workspaceInvitations = pgTable("workspace_invitations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id),
+  email: text("email").notNull(),
+  role: roleEnum("role").notNull().default("student"),
+  token: text("token").notNull().unique(),
+  accepted: boolean("accepted").notNull().default(false),
+  createdById: uuid("created_by_id").references(() => users.id),
+  respondedAt: timestamp("responded_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
