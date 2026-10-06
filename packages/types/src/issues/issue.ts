@@ -77,6 +77,8 @@ export type TBaseIssue = {
   is_draft: boolean;
   is_epic?: boolean;
   is_intake?: boolean;
+  gate_checks_count?: number;
+  gate_checks_completed?: number;
 };
 
 type IssueRelation = {
