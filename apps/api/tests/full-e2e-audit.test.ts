@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { db } from "../src/db/client.js";
-import { users, projects, states, tickets, workspaceInvitations, workspaceMembers, workspaces } from "../src/db/schema.js";
+import { refreshTokens, users, projects, states, tickets, workspaceInvitations, workspaceMembers, workspaces } from "../src/db/schema.js";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../src/auth/password.js";
 
@@ -344,5 +344,59 @@ describe("E2E Complete Feature & RBAC Audit", () => {
     const unsplashRes = await app.request("/api/unsplash/?query=test");
     expect(unsplashRes.status).toBe(200);
     expect(await unsplashRes.json()).toEqual({ results: [] });
+  });
+
+  it("AUDIT 9: Invitation Accept Flow", async () => {
+    const pm = await loginAs("pm");
+    const pmCookie = `sg_refresh=${pm.refreshToken}`;
+    const joinEmail = `invite-join-${Date.now()}@local.dev`;
+    const joinHash = await hashPassword("password123");
+    const [joinUser] = await db
+      .insert(users)
+      .values({ email: joinEmail, name: "Join Probe", role: "student", passwordHash: joinHash })
+      .returning();
+    const inviteRes = await app.request("/api/workspaces/stackgate/invitations/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: pmCookie },
+      body: JSON.stringify({ emails: [{ email: joinEmail, role: 15 }] }),
+    });
+    expect(inviteRes.status).toBe(201);
+    const signinRes = await app.request("/auth/sign-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: joinEmail, password: "password123", wantsJson: true }),
+    });
+    expect(signinRes.status).toBe(200);
+    const joinCookie = (signinRes.headers.get("set-cookie") ?? "").split(";")[0];
+    const myInvitesRes = await app.request("/api/users/me/workspaces/invitations/", {
+      headers: { Cookie: joinCookie },
+    });
+    expect(myInvitesRes.status).toBe(200);
+    const myInvites = (await myInvitesRes.json()) as Array<{ id: string; email: string }>;
+    expect(myInvites.some((i) => i.email === joinEmail)).toBe(false);
+    const [ws] = await db.select().from(workspaces).limit(1);
+    const [pendingRow] = await db
+      .insert(workspaceInvitations)
+      .values({ workspaceId: ws.id, email: joinEmail, role: "lead", token: `probe-${Date.now()}`, createdById: pm.user.id })
+      .returning();
+    const listed = (await (await app.request("/api/users/me/workspaces/invitations/", {
+      headers: { Cookie: joinCookie },
+    })).json()) as Array<{ id: string }>;
+    expect(listed.some((i) => i.id === pendingRow.id)).toBe(true);
+    const acceptRes = await app.request("/api/users/me/workspaces/invitations/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: joinCookie },
+      body: JSON.stringify({ invitations: [pendingRow.id] }),
+    });
+    expect(acceptRes.status).toBe(200);
+    const membership = await db
+      .select()
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.userId, joinUser.id));
+    expect(membership.length).toBeGreaterThan(0);
+    await db.delete(workspaceMembers).where(eq(workspaceMembers.userId, joinUser.id));
+    await db.delete(workspaceInvitations).where(eq(workspaceInvitations.email, joinEmail));
+    await db.delete(refreshTokens).where(eq(refreshTokens.userId, joinUser.id));
+    await db.delete(users).where(eq(users.id, joinUser.id));
   });
 });
