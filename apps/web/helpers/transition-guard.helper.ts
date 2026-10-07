@@ -46,3 +46,24 @@ export function stateTransitionBlockedReason(
 
   return "Tiket harus melewati tahap sebelumnya dulu";
 }
+
+export function requiresTransitionNote(
+  role: TStackGateRole | string | undefined,
+  fromKey: string | undefined,
+  toKey: string | undefined
+): string | null {
+  if (!role || !fromKey || !toKey || fromKey === toKey) return null;
+  if (fromKey === "review" && toKey === "in-development" && role === "lead") {
+    return "Masukkan catatan revisi untuk siswa:";
+  }
+  if (toKey === "backlog" && fromKey !== "backlog" && role !== "student") {
+    return "Masukkan alasan pengembalian ke Backlog:";
+  }
+  return null;
+}
+
+export function promptTransitionNote(label: string): string | null {
+  const note = window.prompt(label);
+  if (!note || note.trim().length === 0) return null;
+  return note.trim();
+}

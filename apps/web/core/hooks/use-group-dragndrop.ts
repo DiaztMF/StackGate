@@ -13,6 +13,9 @@ import { ISSUE_FILTER_DEFAULT_DATA } from "@/store/issue/helpers/base-issues.sto
 import { useIssueDetail } from "./store/use-issue-detail";
 import { useIssues } from "./store/use-issues";
 import { useIssuesActions } from "./use-issues-actions";
+import { getStateKey, promptTransitionNote, requiresTransitionNote } from "@/helpers/transition-guard.helper";
+import { useUser } from "@/hooks/store/user";
+import { useProjectState } from "@/hooks/store/use-project-state";
 
 type DNDStoreType =
   | EIssuesStoreType.PROJECT
@@ -39,6 +42,8 @@ export const useGroupIssuesDragNDrop = (
     issue: { getIssueById },
   } = useIssueDetail();
   const { updateIssue } = useIssuesActions(storeType);
+  const { data: currentUser } = useUser();
+  const { getStateById } = useProjectState();
   const {
     issues: { getIssueIds, addCycleToIssue, removeCycleFromIssue, changeModulesInIssue },
   } = useIssues(storeType);
@@ -94,7 +99,34 @@ export const useGroupIssuesDragNDrop = (
       delete data[moduleKey];
     }
 
-    updateIssue && updateIssue(projectId, issueId, data).catch(() => setToast(errorToastProps));
+    if (data.state_id) {
+      const current = getIssueById(issueId);
+      const noteLabel = requiresTransitionNote(
+        currentUser?.role,
+        getStateKey(current?.state_id ? getStateById(current.state_id) : undefined),
+        getStateKey(data.state_id ? getStateById(data.state_id) : undefined)
+      );
+      if (noteLabel) {
+        const note = promptTransitionNote(noteLabel);
+        if (!note) {
+          setToast({
+            title: "Dibatalkan",
+            type: TOAST_TYPE.WARNING,
+            message: "Catatan wajib diisi untuk melakukan transisi ini.",
+          });
+          return;
+        }
+        (data as Record<string, unknown>).note = note;
+      }
+    }
+    if (updateIssue) {
+      await updateIssue(projectId, issueId, data).catch((err) =>
+        setToast({
+          ...errorToastProps,
+          message: err?.error?.message ?? err?.detail ?? errorToastProps.message,
+        })
+      );
+    }
   };
 
   const handleOnDrop = async (source: GroupDropLocation, destination: GroupDropLocation) => {
@@ -119,7 +151,7 @@ export const useGroupIssuesDragNDrop = (
       setToast({
         title: "Error!",
         type: TOAST_TYPE.ERROR,
-        message: err?.detail ?? "Failed to perform this action",
+        message: err?.error?.message ?? err?.detail ?? "Failed to perform this action",
       });
     });
   };

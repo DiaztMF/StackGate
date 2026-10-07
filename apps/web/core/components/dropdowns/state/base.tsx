@@ -21,7 +21,7 @@ import { DropdownButton } from "@/components/dropdowns/buttons";
 import { BUTTON_VARIANTS_WITH_TEXT } from "@/components/dropdowns/constants";
 import type { TDropdownProps } from "@/components/dropdowns/types";
 // helpers
-import { getStateKey, stateTransitionBlockedReason } from "@/helpers/transition-guard.helper";
+import { getStateKey, promptTransitionNote, requiresTransitionNote, stateTransitionBlockedReason } from "@/helpers/transition-guard.helper";
 // hooks
 import { useDropdown } from "@/hooks/use-dropdown";
 import { useUser } from "@/hooks/store/user";
@@ -144,20 +144,15 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
       : stateTransitionBlockedReason(currentUser?.role, currentStateKey, getStateKey(getStateById(targetStateId)));
 
   const dropdownOnChange = (val: string) => {
-    const targetState = getStateById(val);
-    const targetKey = getStateKey(targetState);
-
-    const isRejectTransition = currentStateKey === "review" && targetKey === "in-development";
-    const isBacklogTransition = targetKey === "backlog" && currentStateKey !== "backlog";
-
-    if (isRejectTransition || isBacklogTransition) {
-      const promptLabel = isRejectTransition ? "Masukkan catatan revisi untuk siswa:" : "Masukkan alasan pengembalian ke Backlog:";
-      const note = window.prompt(promptLabel);
-      if (!note || note.trim().length === 0) {
+    const targetKey = getStateKey(getStateById(val));
+    const noteLabel = requiresTransitionNote(currentUser?.role, currentStateKey, targetKey);
+    if (noteLabel) {
+      const note = promptTransitionNote(noteLabel);
+      if (!note) {
         alert("Catatan wajib diisi untuk melakukan transisi ini.");
         return;
       }
-      (onChange as any)(val, { note: note.trim() });
+      (onChange as any)(val, { note });
     } else {
       onChange(val);
     }
