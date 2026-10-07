@@ -1,12 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { db } from "../src/db/client.js";
 import { refreshTokens, users, projects, states, tickets, workspaceInvitations, workspaceMembers, workspaces } from "../src/db/schema.js";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../src/auth/password.js";
+import { cleanupTracked, trackTicket } from "./cleanup.js";
 
 describe("E2E Complete Feature & RBAC Audit", () => {
   const app = createApp();
+
+  afterAll(cleanupTracked);
 
   // Helper auth request
   async function loginAs(role: "student" | "lead" | "pm" | "superadmin") {
@@ -94,6 +97,7 @@ describe("E2E Complete Feature & RBAC Audit", () => {
       stateId: state.id,
       title: "Audit Ticket Checklist",
     }).returning();
+    trackTicket(ticket.id);
 
     for (const role of ["student", "lead", "pm", "superadmin"] as const) {
       const session = await loginAs(role);
@@ -150,6 +154,7 @@ describe("E2E Complete Feature & RBAC Audit", () => {
       description: "Deskripsi lengkap untuk review",
       assigneeId: studentSession.user.id,
     }).returning();
+    trackTicket(ticket.id);
 
     // 1. Move Backlog -> Ready directly (Illegal jump)
     const jumpRes = await app.request(`/api/workspaces/stackgate/projects/${project.id}/issues/${ticket.id}`, {
@@ -206,6 +211,7 @@ describe("E2E Complete Feature & RBAC Audit", () => {
       title: "Assignee RBAC Test",
       assigneeId: student1.user.id,
     }).returning();
+    trackTicket(ticket.id);
 
     const reassignRes = await app.request(`/api/workspaces/stackgate/projects/${project.id}/issues/${ticket.id}`, {
       method: "PATCH",
