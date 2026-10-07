@@ -36,7 +36,7 @@ function toPlaneInvitation(
     responded_at: row.respondedAt ? row.respondedAt.toISOString() : null,
     role: workspaceRoleNumber(row.role),
     token: row.token,
-    invite_link: `${base}/invitations/?invitation_id=${row.token}`,
+    invite_link: `${base}/invitations/`,
     workspace: { id: ws.id, logo_url: "", name: ws.name, slug: DEMO_WORKSPACE_SLUG },
   };
 }
@@ -171,6 +171,59 @@ workspaceExtras.delete("/:slug/invitations/:invitationId", async (c) => {
   await db.delete(workspaceInvitations).where(eq(workspaceInvitations.id, row.id));
   return c.json({ ok: true });
 });
+export const inviteAcceptApi = new Hono();
+
+inviteAcceptApi.get("/", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const [ws] = await db.select().from(workspaces).limit(1);
+  if (!ws) return c.json([]);
+  const rows = await db
+    .select()
+    .from(workspaceInvitations)
+    .where(
+      and(
+        eq(workspaceInvitations.workspaceId, ws.id),
+        eq(workspaceInvitations.email, user.email.toLowerCase()),
+        eq(workspaceInvitations.accepted, false)
+      )
+    );
+  return c.json(rows.map((r) => toPlaneInvitation(r, ws)));
+});
+
+inviteAcceptApi.post("/", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const [ws] = await db.select().from(workspaces).limit(1);
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  const parsed = await readJson<{ invitations?: string[] }>(c);
+  if (!parsed.ok) return invalidJson(c);
+  const ids = parsed.body.invitations ?? [];
+  if (ids.length === 0) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "Pilih minimal satu undangan" } }, 400);
+  }
+  const accepted = await Promise.all(
+    ids.map(async (id) => {
+      const [row] = await db.select().from(workspaceInvitations).where(eq(workspaceInvitations.id, id)).limit(1);
+      if (!row || row.accepted || row.email.toLowerCase() !== user.email.toLowerCase()) return null;
+      const [membership] = await db
+        .select()
+        .from(workspaceMembers)
+        .where(and(eq(workspaceMembers.workspaceId, ws.id), eq(workspaceMembers.userId, user.id)))
+        .limit(1);
+      if (!membership) {
+        await db.insert(workspaceMembers).values({ workspaceId: ws.id, userId: user.id, role: row.role });
+      }
+      const [done] = await db
+        .update(workspaceInvitations)
+        .set({ accepted: true, respondedAt: new Date() })
+        .where(eq(workspaceInvitations.id, row.id))
+        .returning();
+      return toPlaneInvitation(done, ws);
+    })
+  );
+  return c.json(accepted.filter((a) => a !== null));
+});
 
 workspaceExtras.patch("/:slug", async (c) => {
   const user = await resolvePlaneUser(c);
@@ -183,13 +236,18 @@ workspaceExtras.patch("/:slug", async (c) => {
   if ((await viewerWorkspaceRole(user, ws.id)) < 20) {
     return c.json({ error: { code: "FORBIDDEN", message: "Hanya admin workspace yang boleh mengubah pengaturan" } }, 403);
   }
-  const parsed = await readJson<{ name?: string }>(c);
+  const parsed = await readJson<{ name?: string; timezone?: string }>(c);
   if (!parsed.ok) return invalidJson(c);
   const name = parsed.body.name?.trim() ?? "";
   if (!name) {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "Nama workspace wajib diisi" } }, 400);
   }
-  const [updated] = await db.update(workspaces).set({ name }).where(eq(workspaces.id, ws.id)).returning();
+  const timezone = parsed.body.timezone?.trim() || ws.timezone;
+  const [updated] = await db
+    .update(workspaces)
+    .set({ name, timezone })
+    .where(eq(workspaces.id, ws.id))
+    .returning();
   const at = updated.createdAt.toISOString();
   return c.json({
     id: updated.id,
@@ -205,7 +263,7 @@ workspaceExtras.patch("/:slug", async (c) => {
     updated_by: user.id,
     organization_size: "1-10",
     role: workspaceRoleNumber(user.role),
-    timezone: "Asia/Jakarta",
+    timezone: updated.timezone,
   });
 });
 

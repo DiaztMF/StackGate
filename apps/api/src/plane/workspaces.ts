@@ -61,7 +61,7 @@ function toPlaneWorkspace(ws: WorkspaceRow, owner: ReturnType<typeof toPlaneUser
     updated_by: owner.id,
     organization_size: "1-10",
     role: viewerRole,
-    timezone: "Asia/Jakarta",
+    timezone: ws.timezone,
   };
 }
 
