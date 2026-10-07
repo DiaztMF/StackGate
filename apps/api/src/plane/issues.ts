@@ -7,6 +7,7 @@ import {
   projects,
   researchLinks,
   states,
+  ticketAttachments,
   ticketTransitions,
   tickets,
   users,
@@ -37,6 +38,14 @@ function toDateOnly(value: string | null): string | null {
   return value ? value.slice(0, 10) : null;
 }
 
+async function countAttachments(ticketId: string): Promise<number> {
+  const rows = await db
+    .select({ id: ticketAttachments.id })
+    .from(ticketAttachments)
+    .where(eq(ticketAttachments.ticketId, ticketId));
+  return rows.length;
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -49,7 +58,8 @@ function escapeHtml(str: string): string {
 export function toBaseIssue(
   t: typeof tickets.$inferSelect,
   seq: number,
-  gateStats?: { total: number; completed: number }
+  gateStats?: { total: number; completed: number },
+  attachmentCount = 0
 ) {
   return {
     id: t.id,
@@ -62,7 +72,7 @@ export function toBaseIssue(
     assignee_ids: t.assigneeId ? [t.assigneeId] : [],
     estimate_point: null,
     sub_issues_count: 0,
-    attachment_count: 0,
+    attachment_count: attachmentCount,
     link_count: 0,
     gate_checks_count: gateStats?.total ?? 0,
     gate_checks_completed: gateStats?.completed ?? 0,
@@ -120,9 +130,10 @@ planeIssues.get("/:slug/projects/:projectId/issues", async (c) => {
   if (!project) {
     return c.json({ error: { code: "NOT_FOUND", message: "Project tidak ditemukan" } }, 404);
   }
-  const [ticketRows, gateRows] = await Promise.all([
+  const [ticketRows, gateRows, attachRows] = await Promise.all([
     db.select().from(tickets).where(eq(tickets.projectId, projectId)),
     db.select().from(gateCheckItems),
+    db.select({ ticketId: ticketAttachments.ticketId }).from(ticketAttachments),
   ]);
 
   const gateStatsMap = new Map<string, { total: number; completed: number }>();
@@ -133,7 +144,10 @@ planeIssues.get("/:slug/projects/:projectId/issues", async (c) => {
     gateStatsMap.set(g.ticketId, curr);
   }
 
-  const results = ticketRows.map((t, idx) => toBaseIssue(t, idx + 1, gateStatsMap.get(t.id)));
+  const attachCountMap = new Map<string, number>();
+  for (const a of attachRows) attachCountMap.set(a.ticketId, (attachCountMap.get(a.ticketId) ?? 0) + 1);
+
+  const results = ticketRows.map((t, idx) => toBaseIssue(t, idx + 1, gateStatsMap.get(t.id), attachCountMap.get(t.id) ?? 0));
   return c.json({
     results,
     total_results: results.length,
@@ -206,7 +220,7 @@ planeIssues.get("/:slug/work-items/:itemIdentifier", async (c) => {
   if (!ticket) {
     return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
   }
-  return c.json(toBaseIssue(ticket, sequenceId));
+  return c.json(toBaseIssue(ticket, sequenceId, undefined, await countAttachments(ticket.id)));
 });
 
 planeIssues.get("/:slug/projects/:projectId/issues/:issueId", async (c) => {
@@ -218,7 +232,7 @@ planeIssues.get("/:slug/projects/:projectId/issues/:issueId", async (c) => {
   const issueId = c.req.param("issueId");
   const [ticket] = await db.select().from(tickets).where(eq(tickets.id, issueId)).limit(1);
   if (!ticket) return c.json({ error: { code: "NOT_FOUND", message: "Tiket tidak ditemukan" } }, 404);
-  return c.json(toBaseIssue(ticket, 1));
+  return c.json(toBaseIssue(ticket, 1, undefined, await countAttachments(ticket.id)));
 });
 
 planeIssues.post("/:slug/projects/:projectId/issues", async (c) => {
@@ -362,7 +376,7 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
   // A PATCH carrying only fields this API does not model would leave `updates`
   // empty, and Drizzle rejects an empty SET — echo the ticket back instead.
   if (Object.keys(updates).length === 0) {
-    return c.json(toBaseIssue(ticket, 1));
+    return c.json(toBaseIssue(ticket, 1, undefined, await countAttachments(ticket.id)));
   }
 
   const [updated] = await db.transaction(async (tx) => {
@@ -377,7 +391,7 @@ planeIssues.patch("/:slug/projects/:projectId/issues/:issueId", async (c) => {
     }
     return [row];
   });
-  return c.json(toBaseIssue(updated, 1));
+  return c.json(toBaseIssue(updated, 1, undefined, await countAttachments(updated.id)));
 });
 
 planeIssues.get("/:slug/projects/:projectId/issues/:issueId/gate-checks", async (c) => {

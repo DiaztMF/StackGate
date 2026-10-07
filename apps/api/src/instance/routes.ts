@@ -43,7 +43,7 @@ instanceApi.get("/", (c) =>
       slack_client_id: undefined,
       has_unsplash_configured: false,
       has_llm_configured: false,
-      file_size_limit: 5242880,
+      file_size_limit: 4194304,
       is_smtp_configured: false,
       app_base_url: process.env.WEB_ORIGIN ?? undefined,
       space_base_url: undefined,
