@@ -17,6 +17,7 @@ export const users = pgTable("users", {
 export const workspaces = pgTable("workspaces", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
+  timezone: text("timezone").notNull().default("Asia/Jakarta"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
