@@ -4,10 +4,11 @@
  * See the LICENSE file for details.
  */
 
-import React from "react";
+import React, { useState } from "react";
 import useSWR from "swr";
 import axios from "axios";
 import { API_BASE_URL } from "@plane/constants";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import AnalyticsWrapper from "../analytics-wrapper";
 
@@ -48,6 +49,7 @@ type DashboardData = {
 function Overview() {
   const { currentWorkspace } = useWorkspace();
   const workspaceSlug = currentWorkspace?.slug;
+  const [isExporting, setIsExporting] = useState(false);
 
   const { data, isLoading } = useSWR<DashboardData>(
     workspaceSlug ? `PM_DASHBOARD_${workspaceSlug}` : null,
@@ -64,14 +66,51 @@ function Overview() {
   const workload = data?.workload || [];
   const stuckTickets = data?.stuck_tickets || [];
 
+  const handleExportCsv = async () => {
+    if (!workspaceSlug || isExporting) return;
+    setIsExporting(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/workspaces/${workspaceSlug}/export.csv`, {
+        withCredentials: true,
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `stackgate-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setToast({
+        title: "Gagal mengekspor laporan",
+        type: TOAST_TYPE.ERROR,
+        message: "Coba lagi dalam beberapa saat.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <AnalyticsWrapper i18nTitle="common.overview">
       <div className="flex flex-col gap-6">
-        <div>
-          <h2 className="text-xl font-semibold text-primary">PM Quality & Workload Dashboard</h2>
-          <p className="text-13 text-tertiary">
-            Monitoring beban kerja tim, peringatan tiket macet, dan visibilitas gerbang mutu secara objektif.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-primary">PM Quality & Workload Dashboard</h2>
+            <p className="text-13 text-tertiary">
+              Monitoring beban kerja tim, peringatan tiket macet, dan visibilitas gerbang mutu secara objektif.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={isExporting}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-strong bg-layer-2 px-3 text-body-sm-medium text-secondary shadow-raised-100 transition-colors hover:bg-layer-2-hover active:bg-layer-2-active disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isExporting ? "Menyiapkan..." : "Export CSV"}
+          </button>
         </div>
 
         {/* 4 Metric Cards */}

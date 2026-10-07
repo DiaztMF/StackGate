@@ -454,4 +454,26 @@ describe("E2E Complete Feature & RBAC Audit", () => {
     expect(delRes.status).toBe(200);
     await db.delete(tickets).where(eq(tickets.id, ticket.id));
   });
+
+  it("AUDIT 11: Audit CSV Export", async () => {
+    const pm = await loginAs("pm");
+    const pmCookie = `sg_refresh=${pm.refreshToken}`;
+    const unauthRes = await app.request("/api/workspaces/stackgate/export.csv");
+    expect(unauthRes.status).toBe(401);
+    const badWsRes = await app.request("/api/workspaces/unknown/export.csv", {
+      headers: { Cookie: pmCookie },
+    });
+    expect(badWsRes.status).toBe(404);
+    const res = await app.request("/api/workspaces/stackgate/export.csv", {
+      headers: { Cookie: pmCookie },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/csv");
+    const csv = await res.text();
+    const lines = csv.split("\n");
+    expect(lines[0]).toContain("project");
+    expect(lines[0]).toContain("gate_checked");
+    expect(lines[0]).toContain("days_in_state");
+    expect(lines.length).toBeGreaterThan(1);
+  });
 });

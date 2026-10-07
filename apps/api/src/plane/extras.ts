@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { users, workspaceInvitations, workspaceMembers, workspaces } from "../db/schema.js";
+import { gateCheckItems, projects, researchLinks, states, ticketAttachments, ticketTransitions, tickets, users, workspaceInvitations, workspaceMembers, workspaces } from "../db/schema.js";
 import { DEMO_WORKSPACE_SLUG, resolveDemoWorkspace, resolvePlaneUser, toPlaneUser, unauthorized, workspaceRoleNumber } from "./routes.js";
 import { invalidJson, readJson } from "../http.js";
 
@@ -305,6 +305,105 @@ workspaceExtras.get("/:slug/draft-issues", async (c) => {
     prev_page_results: false,
     total_pages: 1,
     extra_stats: null,
+  });
+});
+
+function csvCell(value: unknown): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+workspaceExtras.get("/:slug/export.csv", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+  const ws = await resolveDemoWorkspace();
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+
+  const [projectRows, stateRows, ticketRows, userRows, transitionRows, gateRows, linkRows, attachRows] = await Promise.all([
+    db.select().from(projects).where(eq(projects.workspaceId, ws.id)),
+    db.select().from(states),
+    db.select().from(tickets),
+    db.select().from(users),
+    db.select().from(ticketTransitions),
+    db.select().from(gateCheckItems),
+    db.select().from(researchLinks),
+    db.select({ ticketId: ticketAttachments.ticketId }).from(ticketAttachments),
+  ]);
+
+  const projectIds = new Set(projectRows.map((p) => p.id));
+  const projectTickets = ticketRows.filter((t) => projectIds.has(t.projectId));
+  const projectMap = new Map(projectRows.map((p) => [p.id, p.name]));
+  const stateMap = new Map(stateRows.map((s) => [s.id, s]));
+  const userMap = new Map(userRows.map((u) => [u.id, u]));
+
+  const gateByTicket = new Map<string, { total: number; done: number }>();
+  for (const g of gateRows) {
+    const curr = gateByTicket.get(g.ticketId) ?? { total: 0, done: 0 };
+    curr.total += 1;
+    if (g.checkedAt) curr.done += 1;
+    gateByTicket.set(g.ticketId, curr);
+  }
+  const linksByTicket = new Map<string, number>();
+  for (const l of linkRows) linksByTicket.set(l.ticketId, (linksByTicket.get(l.ticketId) ?? 0) + 1);
+  const attachByTicket = new Map<string, number>();
+  for (const a of attachRows) attachByTicket.set(a.ticketId, (attachByTicket.get(a.ticketId) ?? 0) + 1);
+  const transitionsByTicket = new Map<string, typeof transitionRows>();
+  for (const tr of transitionRows) {
+    const list = transitionsByTicket.get(tr.ticketId) ?? [];
+    list.push(tr);
+    transitionsByTicket.set(tr.ticketId, list);
+  }
+
+  const header = [
+    "project", "ticket_id", "title", "state", "priority", "assignee_name", "assignee_email",
+    "created_at", "days_in_state", "gate_checked", "gate_total", "research_required",
+    "research_links", "attachments", "transitions", "last_actor", "last_transition_at",
+  ];
+  const lines = [header.map(csvCell).join(",")];
+
+  for (const t of projectTickets) {
+    const state = stateMap.get(t.stateId);
+    const assignee = t.assigneeId ? userMap.get(t.assigneeId) : undefined;
+    const transitions = (transitionsByTicket.get(t.id) ?? []).toSorted(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    );
+    const last = transitions[0];
+    const lastActor = last ? userMap.get(last.actorId)?.name ?? "" : "";
+    const lastDate = last ? last.createdAt : t.createdAt;
+    const daysInState = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+    const gate = gateByTicket.get(t.id) ?? { total: 0, done: 0 };
+    lines.push(
+      [
+        projectMap.get(t.projectId) ?? "",
+        t.id,
+        t.title,
+        state?.name ?? "",
+        t.priority,
+        assignee?.name ?? "",
+        assignee?.email ?? "",
+        t.createdAt.toISOString(),
+        daysInState,
+        gate.done,
+        gate.total,
+        t.researchRequired ? "yes" : "no",
+        linksByTicket.get(t.id) ?? 0,
+        attachByTicket.get(t.id) ?? 0,
+        transitions.length,
+        lastActor,
+        last ? last.createdAt.toISOString() : "",
+      ].map(csvCell).join(",")
+    );
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  return new Response(lines.join("\n"), {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="stackgate-audit-${stamp}.csv"`,
+    },
   });
 });
 
