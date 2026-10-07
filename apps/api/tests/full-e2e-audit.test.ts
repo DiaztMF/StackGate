@@ -399,4 +399,53 @@ describe("E2E Complete Feature & RBAC Audit", () => {
     await db.delete(refreshTokens).where(eq(refreshTokens.userId, joinUser.id));
     await db.delete(users).where(eq(users.id, joinUser.id));
   });
+
+  it("AUDIT 10: Ticket Attachments via Private Blob", async () => {
+    const lead = await loginAs("lead");
+    const student = await loginAs("student");
+    const leadCookie = `sg_refresh=${lead.refreshToken}`;
+    const studentCookie = `sg_refresh=${student.refreshToken}`;
+    const [project] = await db.select().from(projects).limit(1);
+    const pStates = await db.select().from(states).where(eq(states.projectId, project.id));
+    const backlog = pStates.find((s) => s.key === "backlog")!;
+    const [ticket] = await db
+      .insert(tickets)
+      .values({ projectId: project.id, stateId: backlog.id, title: "Attachment Probe Ticket", assigneeId: lead.user.id })
+      .returning();
+    const pngBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const form = new FormData();
+    form.append("file", new Blob([pngBytes], { type: "image/png" }), "probe.png");
+    const uploadRes = await app.request(`/api/workspaces/stackgate/projects/${project.id}/issues/${ticket.id}/attachments/`, {
+      method: "POST",
+      headers: { Cookie: leadCookie },
+      body: form,
+    });
+    expect(uploadRes.status).toBe(201);
+    const uploaded = (await uploadRes.json()) as { id: string; attributes: { name: string; size: number }; issue_id: string };
+    expect(uploaded.attributes.name).toBe("probe.png");
+    expect(uploaded.issue_id).toBe(ticket.id);
+    const listRes = await app.request(`/api/workspaces/stackgate/projects/${project.id}/issues/${ticket.id}/attachments/`, {
+      headers: { Cookie: leadCookie },
+    });
+    expect(listRes.status).toBe(200);
+    const listed = (await listRes.json()) as Array<{ id: string }>;
+    expect(listed.some((a) => a.id === uploaded.id)).toBe(true);
+    const fileRes = await app.request(
+      `/api/workspaces/stackgate/projects/${project.id}/issues/${ticket.id}/attachments/${uploaded.id}/file`,
+      { headers: { Cookie: studentCookie } },
+    );
+    expect(fileRes.status).toBe(200);
+    expect(fileRes.headers.get("content-type")).toContain("image/png");
+    const forbiddenDel = await app.request(
+      `/api/workspaces/stackgate/projects/${project.id}/issues/${ticket.id}/attachments/${uploaded.id}`,
+      { method: "DELETE", headers: { Cookie: studentCookie } },
+    );
+    expect(forbiddenDel.status).toBe(403);
+    const delRes = await app.request(
+      `/api/workspaces/stackgate/projects/${project.id}/issues/${ticket.id}/attachments/${uploaded.id}`,
+      { method: "DELETE", headers: { Cookie: leadCookie } },
+    );
+    expect(delRes.status).toBe(200);
+    await db.delete(tickets).where(eq(tickets.id, ticket.id));
+  });
 });
