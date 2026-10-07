@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projectMembers, projects, users, workspaces } from "../db/schema.js";
+import { projectMembers, projects, users } from "../db/schema.js";
 import { invalidJson, readJson } from "../http.js";
 import { createDefaultProjectStates } from "../plane/workspaces.js";
 import { requireSuperadmin } from "./guard.js";
+import { resolveDemoWorkspace } from "../plane/routes.js";
 
 const adminProjects = new Hono();
 
@@ -36,7 +37,7 @@ adminProjects.post("/projects", requireSuperadmin, async (c) => {
   if (!name) {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "Nama proyek wajib diisi" } }, 400);
   }
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace belum ada" } }, 404);
 
   const slug =

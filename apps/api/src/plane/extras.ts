@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { users, workspaceInvitations, workspaceMembers, workspaces } from "../db/schema.js";
-import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, toPlaneUser, unauthorized, workspaceRoleNumber } from "./routes.js";
+import { DEMO_WORKSPACE_SLUG, resolveDemoWorkspace, resolvePlaneUser, toPlaneUser, unauthorized, workspaceRoleNumber } from "./routes.js";
 import { invalidJson, readJson } from "../http.js";
 
 type UserRow = typeof users.$inferSelect;
@@ -110,7 +110,7 @@ workspaceExtras.get("/:slug/invitations", async (c) => {
   if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
     return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   }
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   const rows = await db
     .select()
@@ -125,7 +125,7 @@ workspaceExtras.post("/:slug/invitations", async (c) => {
   if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
     return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   }
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   if ((await viewerWorkspaceRole(user, ws.id)) < 15) {
     return c.json({ error: { code: "FORBIDDEN", message: "Hanya anggota workspace yang boleh mengundang" } }, 403);
@@ -155,7 +155,7 @@ workspaceExtras.delete("/:slug/invitations/:invitationId", async (c) => {
   if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
     return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   }
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   if ((await viewerWorkspaceRole(user, ws.id)) < 15) {
     return c.json({ error: { code: "FORBIDDEN", message: "Hanya anggota workspace yang boleh membatalkan undangan" } }, 403);
@@ -176,7 +176,7 @@ export const inviteAcceptApi = new Hono();
 inviteAcceptApi.get("/", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (!ws) return c.json([]);
   const rows = await db
     .select()
@@ -194,7 +194,7 @@ inviteAcceptApi.get("/", async (c) => {
 inviteAcceptApi.post("/", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   const parsed = await readJson<{ invitations?: string[] }>(c);
   if (!parsed.ok) return invalidJson(c);
@@ -231,7 +231,7 @@ workspaceExtras.patch("/:slug", async (c) => {
   if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
     return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   }
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   if ((await viewerWorkspaceRole(user, ws.id)) < 20) {
     return c.json({ error: { code: "FORBIDDEN", message: "Hanya admin workspace yang boleh mengubah pengaturan" } }, 403);

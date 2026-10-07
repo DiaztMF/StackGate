@@ -2,12 +2,12 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { projectMembers, projects, states, tickets, ticketTransitions, users, workspaceMembers, workspaces } from "../db/schema.js";
-import { DEMO_WORKSPACE_SLUG, resolvePlaneUser, toPlaneUser, unauthorized, workspaceRoleNumber } from "./routes.js";
+import { projectMembers, projects, states, tickets, ticketTransitions, users, workspaceMembers } from "../db/schema.js";
+import { DEMO_WORKSPACE_SLUG, resolveDemoWorkspace, resolvePlaneUser, toPlaneUser, unauthorized, workspaceRoleNumber } from "./routes.js";
+import type { WorkspaceRow } from "./routes.js";
 import { invalidJson, readJson } from "../http.js";
 
 type UserRow = typeof users.$inferSelect;
-type WorkspaceRow = typeof workspaces.$inferSelect;
 
 // Inside a project a student works like any member: they own tickets, edit
 // descriptions and move them through the gate. Workspace-level role (guest
@@ -41,8 +41,7 @@ export async function createDefaultProjectStates(projectId: string): Promise<voi
 
 async function resolveWorkspace(c: Context): Promise<WorkspaceRow | null> {
   if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) return null;
-  const [ws] = await db.select().from(workspaces).limit(1);
-  return ws ?? null;
+  return resolveDemoWorkspace();
 }
 
 function toPlaneWorkspace(ws: WorkspaceRow, owner: ReturnType<typeof toPlaneUser>, viewerRole: number) {
@@ -771,7 +770,7 @@ planeUserWorkspaces.get("/:slug/project-roles", async (c) => {
   if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
     return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   }
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
   const projectRows = await db.select().from(projects).where(eq(projects.workspaceId, ws.id));
   const memberships = await db.select().from(projectMembers).where(eq(projectMembers.userId, user.id));

@@ -13,6 +13,14 @@ export const DEMO_WORKSPACE_ID = "c8a36d3d-c11c-444b-9612-64f0e384d31f";
 export const DEMO_WORKSPACE_SLUG = "stackgate";
 
 type UserRow = typeof users.$inferSelect;
+export type WorkspaceRow = typeof workspaces.$inferSelect;
+
+export async function resolveDemoWorkspace(): Promise<WorkspaceRow | null> {
+  const [byId] = await db.select().from(workspaces).where(eq(workspaces.id, DEMO_WORKSPACE_ID)).limit(1);
+  if (byId) return byId;
+  const [oldest] = await db.select().from(workspaces).orderBy(workspaces.createdAt).limit(1);
+  return oldest ?? null;
+}
 
 function refreshCookieOptions(): {
   httpOnly: true;
@@ -218,7 +226,7 @@ planeAuth.post("/sign-up", async (c) => {
     .values({ email, name, role: "student", passwordHash: await hashPassword(password) })
     .returning();
 
-  const [ws] = await db.select().from(workspaces).limit(1);
+  const ws = await resolveDemoWorkspace();
   if (ws) {
     await db.insert(workspaceMembers).values({
       workspaceId: ws.id,
