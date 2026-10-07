@@ -1,43 +1,19 @@
-/**
- * Copyright (c) 2023-present Plane Software, Inc. and contributors
- * SPDX-License-Identifier: AGPL-3.0-only
- * See the LICENSE file for details.
- */
-
 import type { AxiosRequestConfig } from "axios";
 import { API_BASE_URL } from "@plane/constants";
-// plane types
-import { getFileMetaDataForUpload, generateFileUploadPayload } from "@plane/services";
-import type { TIssueAttachment, TIssueAttachmentUploadResponse, TIssueServiceType } from "@plane/types";
+import type { TIssueAttachment, TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
-// services
 import { APIService } from "@/services/api.service";
-import { FileUploadService } from "@/services/file-upload.service";
 
 export class IssueAttachmentService extends APIService {
-  private fileUploadService: FileUploadService;
   private serviceType: TIssueServiceType;
 
   constructor(serviceType: TIssueServiceType = EIssueServiceType.ISSUES) {
     super(API_BASE_URL);
-    // upload service
-    this.fileUploadService = new FileUploadService();
     this.serviceType = serviceType;
   }
 
-  private async updateIssueAttachmentUploadStatus(
-    workspaceSlug: string,
-    projectId: string,
-    issueId: string,
-    attachmentId: string
-  ): Promise<void> {
-    return this.patch(
-      `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/attachments/${attachmentId}/`
-    )
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  private basePath(workspaceSlug: string, projectId: string, issueId: string): string {
+    return `/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/attachments`;
   }
 
   async uploadIssueAttachment(
@@ -47,31 +23,20 @@ export class IssueAttachmentService extends APIService {
     file: File,
     uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
   ): Promise<TIssueAttachment> {
-    const fileMetaData = await getFileMetaDataForUpload(file);
-    return this.post(
-      `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/attachments/`,
-      fileMetaData
-    )
-      .then(async (response) => {
-        const signedURLResponse: TIssueAttachmentUploadResponse = response?.data;
-        const fileUploadPayload = generateFileUploadPayload(signedURLResponse, file);
-        await this.fileUploadService.uploadFile(
-          signedURLResponse.upload_data.url,
-          fileUploadPayload,
-          uploadProgressHandler
-        );
-        await this.updateIssueAttachmentUploadStatus(workspaceSlug, projectId, issueId, signedURLResponse.asset_id);
-        return signedURLResponse.attachment;
-      })
+    const formData = new FormData();
+    formData.append("file", file);
+    return this.post(this.basePath(workspaceSlug, projectId, issueId) + "/", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: uploadProgressHandler,
+    })
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
   async getIssueAttachments(workspaceSlug: string, projectId: string, issueId: string): Promise<TIssueAttachment[]> {
-    return this.get(
-      `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/attachments/`
-    )
+    return this.get(this.basePath(workspaceSlug, projectId, issueId) + "/")
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -84,9 +49,7 @@ export class IssueAttachmentService extends APIService {
     issueId: string,
     assetId: string
   ): Promise<TIssueAttachment> {
-    return this.delete(
-      `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/attachments/${assetId}/`
-    )
+    return this.delete(`${this.basePath(workspaceSlug, projectId, issueId)}/${assetId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
