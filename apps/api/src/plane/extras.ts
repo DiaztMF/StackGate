@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { randomBytes } from "node:crypto";
+// oxlint-disable-next-line import/no-named-as-default
+import PDFDocument from "pdfkit";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { gateCheckItems, projects, researchLinks, states, ticketAttachments, ticketTransitions, tickets, users, workspaceInvitations, workspaceMembers, workspaces } from "../db/schema.js";
@@ -308,22 +310,34 @@ workspaceExtras.get("/:slug/draft-issues", async (c) => {
   });
 });
 
+type AuditRow = {
+  project: string;
+  ticketId: string;
+  title: string;
+  state: string;
+  priority: string;
+  assigneeName: string;
+  assigneeEmail: string;
+  createdAt: string;
+  daysInState: number;
+  gateDone: number;
+  gateTotal: number;
+  researchRequired: string;
+  researchLinks: number;
+  attachments: number;
+  transitions: number;
+  lastActor: string;
+  lastTransitionAt: string;
+};
+
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-workspaceExtras.get("/:slug/export.csv", async (c) => {
-  const user = await resolvePlaneUser(c);
-  if (!user) return unauthorized(c);
-  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
-    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
-  }
-  const ws = await resolveDemoWorkspace();
-  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
-
+async function fetchAuditRows(workspaceId: string): Promise<AuditRow[]> {
   const [projectRows, stateRows, ticketRows, userRows, transitionRows, gateRows, linkRows, attachRows] = await Promise.all([
-    db.select().from(projects).where(eq(projects.workspaceId, ws.id)),
+    db.select().from(projects).where(eq(projects.workspaceId, workspaceId)),
     db.select().from(states),
     db.select().from(tickets),
     db.select().from(users),
@@ -357,6 +371,48 @@ workspaceExtras.get("/:slug/export.csv", async (c) => {
     transitionsByTicket.set(tr.ticketId, list);
   }
 
+  return projectTickets.map((t) => {
+    const state = stateMap.get(t.stateId);
+    const assignee = t.assigneeId ? userMap.get(t.assigneeId) : undefined;
+    const transitions = (transitionsByTicket.get(t.id) ?? []).toSorted(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    );
+    const last = transitions[0];
+    const lastDate = last ? last.createdAt : t.createdAt;
+    const gate = gateByTicket.get(t.id) ?? { total: 0, done: 0 };
+    return {
+      project: projectMap.get(t.projectId) ?? "",
+      ticketId: t.id,
+      title: t.title,
+      state: state?.name ?? "",
+      priority: t.priority,
+      assigneeName: assignee?.name ?? "",
+      assigneeEmail: assignee?.email ?? "",
+      createdAt: t.createdAt.toISOString(),
+      daysInState: Math.floor((Date.now() - lastDate.getTime()) / 86400000),
+      gateDone: gate.done,
+      gateTotal: gate.total,
+      researchRequired: t.researchRequired ? "yes" : "no",
+      researchLinks: linksByTicket.get(t.id) ?? 0,
+      attachments: attachByTicket.get(t.id) ?? 0,
+      transitions: transitions.length,
+      lastActor: last ? userMap.get(last.actorId)?.name ?? "" : "",
+      lastTransitionAt: last ? last.createdAt.toISOString() : "",
+    };
+  });
+}
+
+workspaceExtras.get("/:slug/export.csv", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+  const ws = await resolveDemoWorkspace();
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+
+  const rows = await fetchAuditRows(ws.id);
+
   const header = [
     "project", "ticket_id", "title", "state", "priority", "assignee_name", "assignee_email",
     "created_at", "days_in_state", "gate_checked", "gate_total", "research_required",
@@ -364,36 +420,26 @@ workspaceExtras.get("/:slug/export.csv", async (c) => {
   ];
   const lines = [header.map(csvCell).join(",")];
 
-  for (const t of projectTickets) {
-    const state = stateMap.get(t.stateId);
-    const assignee = t.assigneeId ? userMap.get(t.assigneeId) : undefined;
-    const transitions = (transitionsByTicket.get(t.id) ?? []).toSorted(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-    );
-    const last = transitions[0];
-    const lastActor = last ? userMap.get(last.actorId)?.name ?? "" : "";
-    const lastDate = last ? last.createdAt : t.createdAt;
-    const daysInState = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
-    const gate = gateByTicket.get(t.id) ?? { total: 0, done: 0 };
+  for (const r of rows) {
     lines.push(
       [
-        projectMap.get(t.projectId) ?? "",
-        t.id,
-        t.title,
-        state?.name ?? "",
-        t.priority,
-        assignee?.name ?? "",
-        assignee?.email ?? "",
-        t.createdAt.toISOString(),
-        daysInState,
-        gate.done,
-        gate.total,
-        t.researchRequired ? "yes" : "no",
-        linksByTicket.get(t.id) ?? 0,
-        attachByTicket.get(t.id) ?? 0,
-        transitions.length,
-        lastActor,
-        last ? last.createdAt.toISOString() : "",
+        r.project,
+        r.ticketId,
+        r.title,
+        r.state,
+        r.priority,
+        r.assigneeName,
+        r.assigneeEmail,
+        r.createdAt,
+        r.daysInState,
+        r.gateDone,
+        r.gateTotal,
+        r.researchRequired,
+        r.researchLinks,
+        r.attachments,
+        r.transitions,
+        r.lastActor,
+        r.lastTransitionAt,
       ].map(csvCell).join(",")
     );
   }
@@ -403,6 +449,79 @@ workspaceExtras.get("/:slug/export.csv", async (c) => {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="stackgate-audit-${stamp}.csv"`,
+    },
+  });
+});
+
+workspaceExtras.get("/:slug/export.pdf", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  if (c.req.param("slug") !== DEMO_WORKSPACE_SLUG) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+  }
+  const ws = await resolveDemoWorkspace();
+  if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
+
+  const rows = await fetchAuditRows(ws.id);
+  const stuck = rows.filter((r) => r.daysInState >= 3 && r.state !== "Client Ready").length;
+  const complete = rows.filter((r) => r.gateTotal > 0 && r.gateDone === r.gateTotal).length;
+
+  const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 36, info: { Title: `StackGate Audit Report - ${ws.name}` } });
+  const chunks: Buffer[] = [];
+  doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+  const finished = new Promise<void>((resolve) => doc.on("end", () => resolve()));
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  doc.fontSize(16).text(`StackGate Audit Report - ${ws.name}`, { continued: false });
+  doc.fontSize(9).fillColor("#666666").text(`${stamp} - ${rows.length} tiket - ${stuck} stuck (>3 hari) - ${complete} gate tuntas`);
+  doc.moveDown(0.5);
+
+  const columns: Array<{ title: string; width: number; value: (r: AuditRow) => string }> = [
+    { title: "Proyek", width: 90, value: (r) => r.project },
+    { title: "Tiket", width: 150, value: (r) => r.title },
+    { title: "State", width: 90, value: (r) => r.state },
+    { title: "Assignee", width: 90, value: (r) => r.assigneeName || "-" },
+    { title: "Hari", width: 32, value: (r) => String(r.daysInState) },
+    { title: "Gate", width: 40, value: (r) => `${r.gateDone}/${r.gateTotal}` },
+    { title: "Riset", width: 32, value: (r) => String(r.researchLinks) },
+    { title: "File", width: 28, value: (r) => String(r.attachments) },
+    { title: "Aktor Terakhir", width: 90, value: (r) => r.lastActor || "-" },
+  ];
+  const rowHeight = 14;
+  const drawHeader = (y: number) => {
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#111111");
+    let x = doc.page.margins.left;
+    for (const col of columns) {
+      doc.text(col.title, x, y, { width: col.width, ellipsis: true });
+      x += col.width;
+    }
+    return y + rowHeight;
+  };
+
+  let y = drawHeader(doc.y + 4);
+  doc.font("Helvetica").fontSize(8);
+  rows.forEach((r, idx) => {
+    if (y > doc.page.height - doc.page.margins.bottom - rowHeight) {
+      doc.addPage();
+      y = drawHeader(doc.page.margins.top);
+      doc.font("Helvetica").fontSize(8);
+    }
+    doc.fillColor(idx % 2 === 0 ? "#111111" : "#444444");
+    let x = doc.page.margins.left;
+    for (const col of columns) {
+      doc.text(col.value(r), x, y, { width: col.width, ellipsis: true });
+      x += col.width;
+    }
+    y += rowHeight;
+  });
+
+  doc.end();
+  await finished;
+  const pdf = Buffer.concat(chunks);
+  return new Response(new Uint8Array(pdf), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="stackgate-audit-${stamp}.pdf"`,
     },
   });
 });

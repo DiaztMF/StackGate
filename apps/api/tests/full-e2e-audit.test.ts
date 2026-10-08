@@ -476,4 +476,19 @@ describe("E2E Complete Feature & RBAC Audit", () => {
     expect(lines[0]).toContain("days_in_state");
     expect(lines.length).toBeGreaterThan(1);
   });
+
+  it("AUDIT 12: Audit PDF Export", async () => {
+    const pm = await loginAs("pm");
+    const pmCookie = `sg_refresh=${pm.refreshToken}`;
+    const unauthRes = await app.request("/api/workspaces/stackgate/export.pdf");
+    expect(unauthRes.status).toBe(401);
+    const res = await app.request("/api/workspaces/stackgate/export.pdf", {
+      headers: { Cookie: pmCookie },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/pdf");
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(bytes.length).toBeGreaterThan(500);
+    expect(String.fromCharCode(...bytes.slice(0, 5))).toBe("%PDF-");
+  });
 });

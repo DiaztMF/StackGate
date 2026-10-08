@@ -46,6 +46,16 @@ type DashboardData = {
   stuck_tickets: StuckTicket[];
 };
 
+function downloadReport(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
 function Overview() {
   const { currentWorkspace } = useWorkspace();
   const workspaceSlug = currentWorkspace?.slug;
@@ -66,6 +76,7 @@ function Overview() {
   const workload = data?.workload || [];
   const stuckTickets = data?.stuck_tickets || [];
 
+
   const handleExportCsv = async () => {
     if (!workspaceSlug || isExporting) return;
     setIsExporting(true);
@@ -74,14 +85,27 @@ function Overview() {
         withCredentials: true,
         responseType: "blob",
       });
-      const url = window.URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `stackgate-audit-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      downloadReport(new Blob([res.data], { type: "text/csv" }), `stackgate-audit-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch {
+      setToast({
+        title: "Gagal mengekspor laporan",
+        type: TOAST_TYPE.ERROR,
+        message: "Coba lagi dalam beberapa saat.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!workspaceSlug || isExporting) return;
+    setIsExporting(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/workspaces/${workspaceSlug}/export.pdf`, {
+        withCredentials: true,
+        responseType: "blob",
+      });
+      downloadReport(new Blob([res.data], { type: "application/pdf" }), `stackgate-audit-${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch {
       setToast({
         title: "Gagal mengekspor laporan",
@@ -103,14 +127,24 @@ function Overview() {
               Monitoring beban kerja tim, peringatan tiket macet, dan visibilitas gerbang mutu secara objektif.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            disabled={isExporting}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-strong bg-layer-2 px-3 text-body-sm-medium text-secondary shadow-raised-100 transition-colors hover:bg-layer-2-hover active:bg-layer-2-active disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isExporting ? "Menyiapkan..." : "Export CSV"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={isExporting}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-strong bg-layer-2 px-3 text-body-sm-medium text-secondary shadow-raised-100 transition-colors hover:bg-layer-2-hover active:bg-layer-2-active disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isExporting ? "Menyiapkan..." : "Export CSV"}
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={isExporting}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-strong bg-layer-2 px-3 text-body-sm-medium text-secondary shadow-raised-100 transition-colors hover:bg-layer-2-hover active:bg-layer-2-active disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isExporting ? "Menyiapkan..." : "Export PDF"}
+            </button>
+          </div>
         </div>
 
         {/* 4 Metric Cards */}
