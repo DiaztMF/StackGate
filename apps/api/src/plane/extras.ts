@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 // oxlint-disable-next-line import/no-named-as-default
 import PDFDocument from "pdfkit";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { gateCheckItems, projects, researchLinks, states, ticketAttachments, ticketTransitions, tickets, users, workspaceInvitations, workspaceMembers, workspaces } from "../db/schema.js";
 import { DEMO_WORKSPACE_SLUG, resolveDemoWorkspace, resolvePlaneUser, toPlaneUser, unauthorized, workspaceRoleNumber } from "./routes.js";
@@ -337,7 +337,7 @@ function csvCell(value: unknown): string {
 
 async function fetchAuditRows(workspaceId: string): Promise<AuditRow[]> {
   const [projectRows, stateRows, ticketRows, userRows, transitionRows, gateRows, linkRows, attachRows] = await Promise.all([
-    db.select().from(projects).where(eq(projects.workspaceId, workspaceId)),
+    db.select().from(projects).where(and(eq(projects.workspaceId, workspaceId), isNull(projects.archivedAt))),
     db.select().from(states),
     db.select().from(tickets),
     db.select().from(users),

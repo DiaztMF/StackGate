@@ -4,7 +4,7 @@ import { db } from "../src/db/client.js";
 import { refreshTokens, users, projects, states, tickets, workspaceInvitations, workspaceMembers, workspaces } from "../src/db/schema.js";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../src/auth/password.js";
-import { cleanupTracked, trackTicket } from "./cleanup.js";
+import { cleanupTracked, trackProject, trackTicket } from "./cleanup.js";
 
 describe("E2E Complete Feature & RBAC Audit", () => {
   const app = createApp();
@@ -490,5 +490,57 @@ describe("E2E Complete Feature & RBAC Audit", () => {
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect(bytes.length).toBeGreaterThan(500);
     expect(String.fromCharCode(...bytes.slice(0, 5))).toBe("%PDF-");
+  });
+
+  it("AUDIT 13: Archived projects hidden, inactive users excluded", async () => {
+    const pm = await loginAs("pm");
+    const pmCookie = `sg_refresh=${pm.refreshToken}`;
+    const superadmin = await loginAs("superadmin");
+    const adminCookie = `sg_refresh=${superadmin.refreshToken}`;
+    const student = await loginAs("student");
+    const created = await app.request("/api/workspaces/stackgate/projects", {
+      method: "POST",
+      headers: { Cookie: pmCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Audit Hide Me" }),
+    });
+    expect(created.status).toBe(201);
+    const project = (await created.json()) as { id: string };
+    trackProject(project.id);
+    const listBefore = (await (
+      await app.request("/api/workspaces/stackgate/projects", { headers: { Cookie: pmCookie } })
+    ).json()) as Array<{ id: string }>;
+    expect(listBefore.some((p) => p.id === project.id)).toBe(true);
+    const archived = await app.request(`/api/admin/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { Cookie: adminCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+    expect(archived.status).toBe(200);
+    const listAfter = (await (
+      await app.request("/api/workspaces/stackgate/projects", { headers: { Cookie: pmCookie } })
+    ).json()) as Array<{ id: string }>;
+    expect(listAfter.some((p) => p.id === project.id)).toBe(false);
+    const unarchived = await app.request(`/api/admin/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { Cookie: adminCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: false }),
+    });
+    expect(unarchived.status).toBe(200);
+    const deactivated = await app.request(`/api/admin/users/${student.user.id}`, {
+      method: "PATCH",
+      headers: { Cookie: adminCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: false }),
+    });
+    expect(deactivated.status).toBe(200);
+    const dashboard = (await (
+      await app.request("/api/workspaces/stackgate/pm-dashboard", { headers: { Cookie: pmCookie } })
+    ).json()) as { workload: Array<{ user: { email: string } }> };
+    expect(dashboard.workload.some((w) => w.user.email === student.user.email)).toBe(false);
+    const reactivated = await app.request(`/api/admin/users/${student.user.id}`, {
+      method: "PATCH",
+      headers: { Cookie: adminCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: true }),
+    });
+    expect(reactivated.status).toBe(200);
   });
 });

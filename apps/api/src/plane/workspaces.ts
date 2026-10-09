@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { projectMembers, projects, states, tickets, ticketTransitions, users, workspaceMembers } from "../db/schema.js";
 import { DEMO_WORKSPACE_SLUG, resolveDemoWorkspace, resolvePlaneUser, toPlaneUser, unauthorized, workspaceRoleNumber } from "./routes.js";
@@ -147,7 +147,10 @@ function toPlaneProject(
 }
 
 async function listPlaneProjects(user: UserRow, ws: WorkspaceRow, ownerId: string) {
-  const rows = await db.select().from(projects).where(eq(projects.workspaceId, ws.id));
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.workspaceId, ws.id), isNull(projects.archivedAt)));
   const memberships = await db.select().from(projectMembers).where(eq(projectMembers.userId, user.id));
   const roleByProject = new Map(memberships.map((m) => [m.projectId, roleNumber(m.role)]));
   return rows.map((p) => toPlaneProject(p, ws.id, roleByProject.get(p.id) ?? roleNumber(user.role), ownerId));
@@ -649,7 +652,10 @@ planeWorkspaces.get("/:slug/pm-dashboard", async (c) => {
   const ws = await resolveWorkspace(c);
   if (!ws) return c.json({ error: { code: "NOT_FOUND", message: "Workspace tidak ditemukan" } }, 404);
 
-  const projectRows = await db.select().from(projects).where(eq(projects.workspaceId, ws.id));
+  const projectRows = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.workspaceId, ws.id), isNull(projects.archivedAt)));
   const projectIds = projectRows.map((p) => p.id);
 
   if (projectIds.length === 0) {
@@ -669,7 +675,7 @@ planeWorkspaces.get("/:slug/pm-dashboard", async (c) => {
   const [stateRows, ticketRows, userRows, transitionRows] = await Promise.all([
     db.select().from(states).where(inArray(states.projectId, projectIds)),
     db.select().from(tickets).where(inArray(tickets.projectId, projectIds)),
-    db.select().from(users),
+    db.select().from(users).where(eq(users.isActive, true)),
     db.select().from(ticketTransitions),
   ]);
 
