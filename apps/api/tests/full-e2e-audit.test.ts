@@ -350,6 +350,21 @@ describe("E2E Complete Feature & RBAC Audit", () => {
     const unsplashRes = await app.request("/api/unsplash/?query=test");
     expect(unsplashRes.status).toBe(200);
     expect(await unsplashRes.json()).toEqual({ results: [] });
+
+    const [probeProject] = await db.select({ id: projects.id }).from(projects).limit(1);
+    const patchPropsRes = await app.request(
+      `/api/workspaces/stackgate/projects/${probeProject.id}/user-properties/`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Cookie: pmCookie },
+        body: JSON.stringify({ display_filters: { layout: "kanban" } }),
+      },
+    );
+    expect(patchPropsRes.status).toBe(200);
+    const patchedProps = (await patchPropsRes.json()) as { display_filters: { layout: string } };
+    expect(patchedProps.display_filters.layout).toBe("kanban");
+    expect(unsplashRes.status).toBe(200);
+    expect(await unsplashRes.json()).toEqual({ results: [] });
   });
 
   it("AUDIT 9: Invitation Accept Flow", async () => {

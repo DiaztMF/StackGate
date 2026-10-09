@@ -306,6 +306,23 @@ planeWorkspaces.get("/:slug/projects/:projectId/issue-labels", async (c) => {
   return c.json([]);
 });
 
+planeWorkspaces.patch("/:slug/projects/:projectId/user-properties", async (c) => {
+  const user = await resolvePlaneUser(c);
+  if (!user) return unauthorized(c);
+  const parsed = await readJson<Record<string, unknown>>(c);
+  return c.json({
+    sort_order: 1,
+    preferences: {
+      pages: { block_display: true },
+      navigation: { default_tab: "issues", hide_in_more_menu: [] },
+    },
+    rich_filters: [],
+    display_filters: {},
+    display_properties: {},
+    ...(parsed.ok ? parsed.body : {}),
+  });
+});
+
 planeWorkspaces.get("/:slug/projects/:projectId/user-properties", async (c) => {
   const user = await resolvePlaneUser(c);
   if (!user) return unauthorized(c);
