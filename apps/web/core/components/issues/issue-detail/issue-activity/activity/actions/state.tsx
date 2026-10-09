@@ -8,6 +8,7 @@ import { observer } from "mobx-react";
 // hooks
 import { StateOutline } from "@makeplane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useProjectState } from "@/hooks/store/use-project-state";
 // components
 import { IssueActivityBlockComponent, IssueLink } from "./";
 // icons
@@ -22,6 +23,8 @@ export const IssueStateActivity = observer(function IssueStateActivity(props: TI
   } = useIssueDetail();
 
   const activity = getActivityById(activityId);
+  const { getStateById } = useProjectState();
+  const stateName = activity?.new_value ? (getStateById(activity.new_value)?.name ?? activity.new_value) : "none";
 
   if (!activity) return <></>;
   return (
@@ -31,7 +34,7 @@ export const IssueStateActivity = observer(function IssueStateActivity(props: TI
       ends={ends}
     >
       <>
-        set the state to <span className="font-medium text-primary">{activity.new_value}</span>
+        set the state to <span className="font-medium text-primary">{stateName}</span>
         {showIssue ? ` for ` : ``}
         {showIssue && <IssueLink activityId={activityId} />}.
       </>
